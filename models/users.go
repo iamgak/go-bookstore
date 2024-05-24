@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"strings"
 )
 
 type LoginResponse struct {
@@ -27,79 +28,105 @@ type User struct {
 	Email string
 }
 
+// type UserModels interface {
+// 	InsertUser(string, string, string) (bool, error)
+// 	Authenticate(string, string) (int64, error)
+// 	EmailExist(string) (bool, error)
+// }
+
 // Define a new UserModel type which wraps a database connection pool.
 type UserModel struct {
 	DB *sql.DB
 }
 
 // We'll use the Insert method to add a new record to the "users" table.
-func (m *UserModel) InsertUser(userInfo *CreateAccountRequest) (int64, error) {
-	result, err := m.DB.Exec("INSERT INTO users(`email`,`password`,`verified`) VALUES (?, password(?),? )", userInfo.Email, userInfo.Password, userInfo.Verified)
+func (m *UserModel) InsertUser(email, password, hashed string) (bool, error) {
+	_, err := m.DB.Exec("INSERT INTO users(`email`,`password`,`verified`) VALUES (?, password(?),? )", email, password, hashed)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	return id, nil
+	return true, nil
 }
 
-// We'll use the Authenticate method to verify whether a user exists with
-// the provided email address and password. This will return the relevant
-// user ID if they do.
-func (m *UserModel) Authenticate(user *LoginRequest) (int64, error) {
-	var uid int64
-	err := m.DB.QueryRow("SELECT id FROM `users` WHERE `active` = 1 AND `email` = ? AND `password` = PASSWORD(?) ", user.Email, user.Password).Scan(&uid)
-	if err != nil {
-		return 0, err
-	}
+func (m *UserModel) Authorization(token string, uid int64) error {
 
-	if uid == 0 {
-		return 0, nil
+	_, err := m.DB.Exec("UPDATE `users` SET `token` = ? WHERE `id` = ?", token, uid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *UserModel) Logout(token string) error {
+
+	_, err := m.DB.Exec("UPDATE `users` SET `token` = NULL WHERE `token` = ?", token)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (m *UserModel) Authenticate(email, password string) (int64, error) {
+	var uid int64
+	err := m.DB.QueryRow("SELECT id FROM `users` WHERE `active` = 1 AND `email` = ? AND `password` = PASSWORD(?) ", email, password).Scan(&uid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+
+		return 0, err
 	}
 
 	return uid, nil
 }
 
-func (m *UserModel) EmailExist(email string) (int64, error) {
+func (m *UserModel) EmailExist(email string) (bool, error) {
 	var valid int64
 	err := m.DB.QueryRow("SELECT 1 FROM `users` WHERE  `email` = ?", email).Scan(&valid)
 	if err != nil && err != sql.ErrNoRows {
-		return 0, err
-	}
-
-	if valid == 0 {
-		return 0, nil
-	}
-
-	return valid, nil
-}
-
-func (m *UserModel) ValidToken(token string) (*User, error) {
-	user := &User{}
-	err := m.DB.QueryRow("SELECT email, id FROM users WHERE token = ? ", token).Scan(&user.Email, &user.Id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrNoRecord
-		} else {
-			return nil, err
-		}
-	}
-
-	return user, nil
-}
-
-func (m *UserModel) CheckBearerToken(token string) (bool, error) {
-
-	var count int
-	err := m.DB.QueryRow("SELECT COUNT(*) FROM users WHERE token = ? ", token).Scan(&count)
-	if err != nil {
 		return false, err
 	}
 
-	// If count is greater than 0, token is valid
-	return count > 0, nil
+	if valid == 0 {
+		return false, nil
+	}
+
+	return true, nil
 }
+
+func (m *UserModel) ValidToken(token string) (int, error) {
+
+	var id int
+	err := m.DB.QueryRow("SELECT  id FROM users WHERE token = ? ", token).Scan(id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, ErrNoRecord
+		} else {
+			return 0, err
+		}
+	}
+
+	return id, nil
+}
+
+func (m *UserModel) AccountActivate(token string) error {
+
+	result, err := m.DB.Exec("UPDATE users SET `verified` = NULL, `active` = 1 WHERE verified = ? ", token)
+	if err != nil {
+		return err
+	}
+
+	_, err = result.RowsAffected()
+	return err
+}
+func (m *UserModel) CheckBearerToken(token string) string {
+
+	if token == "" {
+		return ""
+	}
+
+	return strings.TrimPrefix(token, "Bearer ")
+
+}
+
+// var _ UserModels = (*UserModel)(nil)

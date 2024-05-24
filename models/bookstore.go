@@ -12,30 +12,37 @@ type Book struct {
 	Price  float32 `json:"price"`
 }
 
+// type BookModels interface {
+// 	InsertBook(*Book) (int, error)
+// 	BookExist(string) (int, error)
+// 	GET(string) (*Book, error)
+// 	BooksListing(string) ([]*Book, error)
+// }
+
 // Define a new BookModel type which wraps a database connection pool.
 type BookModel struct {
 	DB *sql.DB
 }
 
 // We'll use the Insert method to add a new record to the "bookstore" table.
-func (m *BookModel) InsertBook(ISBN, Author, Title string, Price float64) (int, error) {
+func (m *BookModel) InsertBook(ISBN, Author, Title, Genre, Descriptions string, Price float64, User_id int) (bool, error) {
 
-	result, err := m.DB.Exec("INSERT INTO `books` (`ISBN`,`price`,`Title`,`author`) VALUES (?,?,?,? )", ISBN, Price, Title, Author)
+	result, err := m.DB.Exec("INSERT INTO `reviews` (`isbn`,`price`,`title`,`author`,`genre`,`descriptions`,`uid`) VALUES (?,?,?,?,?,?,? )", ISBN, Price, Title, Author, Genre, Descriptions, User_id)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 
-	id, err := result.LastInsertId()
+	_, err = result.LastInsertId()
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 
-	return int(id), nil
+	return false, nil
 }
 
 func (m *BookModel) BookExist(ISBN string) (int64, error) {
 	var valid int64
-	err := m.DB.QueryRow("SELECT 1 FROM `books` WHERE  `ISBN` = ?", ISBN).Scan(&valid)
+	err := m.DB.QueryRow("SELECT 1 FROM `reviews` WHERE  `ISBN` = ?", ISBN).Scan(&valid)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
@@ -55,7 +62,7 @@ func (m *BookModel) BookExist(ISBN string) (int64, error) {
 func (m *BookModel) GET(ISBN string) (*Book, error) {
 
 	bk := &Book{}
-	err := m.DB.QueryRow("SELECT ISBN,Title,author,price FROM `books` WHERE  `ISBN` = ?", ISBN).Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price)
+	err := m.DB.QueryRow("SELECT ISBN,Title,author,price FROM `reviews` WHERE  `ISBN` = ?", ISBN).Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -65,12 +72,11 @@ func (m *BookModel) GET(ISBN string) (*Book, error) {
 	}
 
 	return bk, err
-
 }
 
 func (m *BookModel) BooksListing() ([]*Book, error) {
 
-	rows, err := m.DB.Query("SELECT isbn, title, author, price FROM `books`")
+	rows, err := m.DB.Query("SELECT isbn, title, author, price FROM `reviews`")
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoRecord
