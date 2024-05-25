@@ -21,20 +21,11 @@ type CreateAccountRequest struct {
 	Password string `json:"password"`
 }
 
-// Define a new User type. Notice how the field names and types align
-// with the columns in the database "users" table?
 type User struct {
 	Id    int
 	Email string
 }
 
-// type UserModels interface {
-// 	InsertUser(string, string, string) (bool, error)
-// 	Authenticate(string, string) (int64, error)
-// 	EmailExist(string) (bool, error)
-// }
-
-// Define a new UserModel type which wraps a database connection pool.
 type UserModel struct {
 	DB *sql.DB
 }
@@ -50,7 +41,6 @@ func (m *UserModel) InsertUser(email, password, hashed string) (bool, error) {
 }
 
 func (m *UserModel) Authorization(token string, uid int64) error {
-
 	_, err := m.DB.Exec("UPDATE `users` SET `token` = ? WHERE `id` = ?", token, uid)
 	if err != nil {
 		return err
@@ -59,58 +49,32 @@ func (m *UserModel) Authorization(token string, uid int64) error {
 }
 
 func (m *UserModel) Logout(token string) error {
-
 	_, err := m.DB.Exec("UPDATE `users` SET `token` = NULL WHERE `token` = ?", token)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (m *UserModel) Authenticate(email, password string) (int64, error) {
+func (m *UserModel) Authenticate(email, password string) int64 {
 	var uid int64
-	err := m.DB.QueryRow("SELECT id FROM `users` WHERE `active` = 1 AND `email` = ? AND `password` = PASSWORD(?) ", email, password).Scan(&uid)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, nil
-		}
+	_ = m.DB.QueryRow("SELECT id FROM `users` WHERE `active` = 1 AND `email` = ? AND `password` = PASSWORD(?) ", email, password).Scan(&uid)
 
-		return 0, err
-	}
-
-	return uid, nil
+	return uid
 }
 
-func (m *UserModel) EmailExist(email string) (bool, error) {
-	var valid int64
-	err := m.DB.QueryRow("SELECT 1 FROM `users` WHERE  `email` = ?", email).Scan(&valid)
-	if err != nil && err != sql.ErrNoRows {
-		return false, err
-	}
-
-	if valid == 0 {
-		return false, nil
-	}
-
-	return true, nil
+func (m *UserModel) EmailExist(email string) int64 {
+	var uid int64
+	_ = m.DB.QueryRow("SELECT id FROM `users` WHERE  `email` = ?", email).Scan(&uid)
+	return uid
 }
 
-func (m *UserModel) ValidToken(token string) (int, error) {
-
+func (m *UserModel) ValidToken(token string) int {
 	var id int
-	err := m.DB.QueryRow("SELECT  id FROM users WHERE token = ? ", token).Scan(id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, ErrNoRecord
-		} else {
-			return 0, err
-		}
-	}
-
-	return id, nil
+	_ = m.DB.QueryRow("SELECT id FROM users WHERE token = ? ", token).Scan(&id)
+	return id
 }
 
 func (m *UserModel) AccountActivate(token string) error {
-
 	result, err := m.DB.Exec("UPDATE users SET `verified` = NULL, `active` = 1 WHERE verified = ? ", token)
 	if err != nil {
 		return err
@@ -119,14 +83,42 @@ func (m *UserModel) AccountActivate(token string) error {
 	_, err = result.RowsAffected()
 	return err
 }
-func (m *UserModel) CheckBearerToken(token string) string {
 
+func (m *UserModel) ForgetPassword(uid int64, uri string) (int64, error) {
+	_, _ = m.DB.Exec("UPDATE `forget_passw` SET superseded = 1 WHERE uid = ?", uid)
+	data, err := m.DB.Exec("INSERT INTO `forget_passw` (uid,uri,superseded) VALUES(?,?,0) ", uid, uri)
+	if err != nil {
+		return 0, err
+	}
+
+	rowsAffected, err := data.RowsAffected()
+	return rowsAffected, nil
+}
+
+func (m *UserModel) ForgetPasswordUri(uri string) (int, error) {
+	var result int
+	err := m.DB.QueryRow("SELECT uid FROM `forget_passw` WHERE uri = ? AND superseded = 0", uri).Scan(&result)
+	if err != nil {
+		return 0, err
+	}
+
+	return result, nil
+}
+
+func (m *UserModel) NewPassword(password string, id int) error {
+	_, err := m.DB.Exec("UPDATE `users` SET password = PASSWORD(?) WHERE id = ?", password, id)
+	if err != nil {
+		return err
+	}
+
+	_, _ = m.DB.Exec("UPDATE `forget_passw` SET superseded =1 WHERE uid = ?", id)
+	return nil
+}
+
+func (m *UserModel) CheckBearerToken(token string) string {
 	if token == "" {
 		return ""
 	}
 
 	return strings.TrimPrefix(token, "Bearer ")
-
 }
-
-// var _ UserModels = (*UserModel)(nil)

@@ -7,6 +7,11 @@ import (
 	"net/http"
 	// "regexp"
 	"strconv"
+
+	"github.com/julienschmidt/httprouter"
+	"test.iamgak.net/validator"
+
+	// "strings"
 	"time"
 )
 
@@ -16,69 +21,17 @@ type Message struct {
 }
 
 func (app *application) Home(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		app.notFound(w)
-		return
-	}
-
-	if r.Method == "GET" {
-		resp := Message{
-			Status:  true,
-			Message: "Welcome to our Bookstore, Website",
-		}
-
-		app.sendJSONResponse(w, 200, &resp)
-		return
-	}
-
-	err := r.ParseForm()
-	if err != nil {
-		app.errorLog.Println("Error parsing form data:", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-	validator := app.validator
-
-	email := r.FormValue("email")
-	password := r.FormValue("password")
-	repeatPassword := r.FormValue("repeatPassword")
-
-	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
-	if validator.Errors["email"] == "" {
-		validator.CheckField(validator.ValidEmail(email), "email", "Invalid email")
-	}
-
-	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
-	if validator.Errors["password"] == "" {
-		validator.CheckField(validator.MaxChars(password, 15), "password", "Password should not be less than than 15 character")
-	}
-
-	validator.CheckField(validator.NotBlank(repeatPassword), "repeatPassword", "Empty Repeat Password")
-	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {
-		if password != repeatPassword {
-			validator.Errors["repeatPassword"] = "Password not matched"
-		}
-	}
-
-	if !validator.Valid() {
-		app.sendJSONResponse(w, 200, validator)
-		return
-	}
-
 	resp := Message{
 		Status:  true,
-		Message: "Submitted Successfully",
+		Message: "Welcome to our Bookstore, Website",
 	}
-	app.sendJSONResponse(w, 200, resp)
+
+	app.sendJSONResponse(w, 200, &resp)
 }
 
-// book related handlers --done
+// book related handlers
+// listing
 func (app *application) BooksListing(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		app.CustomError(w, "METHOD NOT ALLOWED", 405)
-		return
-	}
-
 	bks, err := app.books.BooksListing()
 	if err != nil {
 		app.errorLog.Print("internal server error")
@@ -89,14 +42,12 @@ func (app *application) BooksListing(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, bks)
 }
 
-// book-info
 func (app *application) BooksInfo(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		app.CustomError(w, "METHOD NOT ALLOWED", 405)
+	params := httprouter.ParamsFromContext(r.Context())
+	isbn := params.ByName("isbn")
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
 	}
-
-	isbn := r.URL.Query().Get("isbn")
-	validator := app.validator
 	validator.CheckField(validator.NotBlank(isbn), "ISBN", "Empty, ISBN field")
 
 	if !validator.Valid() {
@@ -114,20 +65,14 @@ func (app *application) BooksInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) AddBooks(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		app.CustomError(w, "Method Not allowed", 403)
-		return
-	}
-
 	authHeader := r.Header.Get("Authorization")
-	// Check if token is valid
 	token := app.user.CheckBearerToken(authHeader)
 	if token == "" {
 		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
 		return
 	}
 
-	uid, _ := app.user.ValidToken(token)
+	uid := app.user.ValidToken(token)
 	if uid == 0 {
 		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
 		return
@@ -138,31 +83,39 @@ func (app *application) AddBooks(w http.ResponseWriter, r *http.Request) {
 	author := r.FormValue("author")
 	genre := r.FormValue("genre")
 	descriptions := r.FormValue("descriptions")
-	validator := app.validator
-	validator.CheckField(validator.NotBlank(isbn), "ISBN", "Please, fill the ISBN field")
-	validator.CheckField(validator.NotBlank(author), "AUTHOR", "Please, fill the Author field")
-	validator.CheckField(validator.NotBlank(title), "TITLE", "Please, fill the title field")
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
+	}
+	validator.CheckField(validator.NotBlank(isbn), "isbn", "Please, fill the isbn field")
+	validator.CheckField(validator.NotBlank(genre), "genre", "Please, fill the genre field")
+	validator.CheckField(validator.NotBlank(descriptions), "descriptions", "Please, fill the descriptions field")
+	validator.CheckField(validator.NotBlank(author), "author", "Please, fill the author field")
+	validator.CheckField(validator.NotBlank(title), "title", "Please, fill the title field")
 
-	if validator.Errors["ISBN"] == "" {
-		validator.CheckField(validator.MaxChars(isbn, 20), "ISBN", "Please, fill the ISBN shorter than 20")
+	if validator.Errors["isbn"] == "" {
+		validator.CheckField(validator.MaxChars(isbn, 20), "isbn", "Please, fill the ISBN shorter than 20")
 	}
 
-	if validator.Errors["AUTHOR"] == "" {
-		validator.CheckField(validator.MaxChars(isbn, 20), "AUTHOR", "Please, fill the AUTHOR shorter than 20")
+	if validator.Errors["descriptions"] == "" {
+		validator.CheckField(validator.MaxChars(isbn, 100), "isbn", "Please, fill the ISBN shorter than 20")
 	}
-	if validator.Errors["TITLE"] == "" {
-		validator.CheckField(validator.MaxChars(isbn, 20), "TITLE", "Please, fill the TITLE shorter than 20")
+
+	if validator.Errors["author"] == "" {
+		validator.CheckField(validator.MaxChars(isbn, 20), "author", "Please, fill the AUTHOR shorter than 20")
+	}
+	if validator.Errors["title"] == "" {
+		validator.CheckField(validator.MaxChars(isbn, 20), "title", "Please, fill the TITLE shorter than 20")
 	}
 
 	price, err := strconv.ParseFloat(r.FormValue("price"), 32)
 	if err != nil {
-		validator.Errors["PRICE"] = "Invalid price value"
+		validator.Errors["price"] = "Invalid price value"
 	}
 
 	if validator.Valid() {
 		book_id, _ := app.books.BookExist(isbn)
 		if book_id != 0 {
-			validator.Errors["ISBN"] = "ISBN already Exist"
+			validator.Errors["isbn"] = "isbn already Exist"
 		}
 	}
 
@@ -183,32 +136,41 @@ func (app *application) AddBooks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.sendJSONResponse(w, 200, resp)
-
 }
 
-// user related handlers
 func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		app.CustomError(w, "Method Not Allowd", 405)
+	err := r.ParseForm()
+	if err != nil {
+		app.errorLog.Println("Error parsing form data:", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
 	email := r.FormValue("email")
 	password := r.FormValue("password")
-	validator := app.validator
-	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
-	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
-
-	var exist bool
-	exist, err := app.user.EmailExist(email)
-	if err != nil {
-		app.errorLog.Print(w, err)
-		app.CustomError(w, "Internal Server Error122", 500)
-		return
+	repeatPassword := r.FormValue("repeatPassword")
+	app.infoLog.Print(repeatPassword)
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
 	}
 
-	if !exist {
-		validator.CheckField(validator.NotBlank(email), "ISBN", "Email already registered")
+	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
+	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
+	validator.CheckField(validator.NotBlank(repeatPassword), "repeatPassword", "Please, fill the repeat password field")
+	if validator.Errors["password"] == "" {
+		validator.CheckField(validator.ValidPassword(password), "password", "Password should be greater than 6 character must contain alphanumeric char, one special char")
+	}
+
+	if validator.Errors["email"] == "" {
+		validator.CheckField(validator.ValidEmail(email), "email", "Invalid Email Format")
+	} else if app.user.EmailExist(email) == 0 {
+		validator.CheckField(false, "email", "Email already registered")
+	}
+
+	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {
+		if password != repeatPassword {
+			validator.Errors["repeatPassword"] = "Password not matched"
+		}
 	}
 
 	if !validator.Valid() {
@@ -217,7 +179,7 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hashed := app.generateHash(r.RemoteAddr, r.URL.Port())
-	exist, err = app.user.InsertUser(email, password, hashed)
+	exist, err := app.user.InsertUser(email, password, hashed)
 	if err != nil || !exist {
 		app.serverError(w, err)
 		return
@@ -229,18 +191,14 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.sendJSONResponse(w, 200, resp)
-
 }
 
 func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if r.Method == "POST" || token == "" {
-		app.notFound(w)
-		return
-	}
-
-	err := app.user.AccountActivate(token)
+	params := httprouter.ParamsFromContext(r.Context())
+	uri := params.ByName("uri")
+	err := app.user.AccountActivate(uri)
 	if err != nil {
+		app.infoLog.Print("hello")
 		app.notFound(w)
 		return
 	}
@@ -249,19 +207,34 @@ func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		app.notFound(w)
+	err := r.ParseForm()
+	if err != nil {
+		app.errorLog.Println("Error parsing form data:", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	email, password := r.FormValue("email"), r.FormValue("password")
-	var uid int64
-	uid, err := app.user.Authenticate(email, password)
-	if err != nil || uid == 0 {
-		resp := Message{
-			Status:  true,
-			Message: "Incorrect Credentials",
-		}
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
+	}
+	email := r.FormValue("email")
+	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
+	if validator.Errors["email"] == "" {
+		validator.CheckField(validator.ValidEmail(email), "email", "Invalid email")
+	}
+
+	password := r.FormValue("password")
+	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
+
+	if !validator.Valid() {
+		app.sendJSONResponse(w, 200, validator)
+		return
+	}
+
+	// email, password := r.FormValue("email"), r.FormValue("password")
+	uid := app.user.Authenticate(email, password)
+	if uid == 0 {
+		resp := app.sendMessage(false, "Incorrect Credentials")
 		app.sendJSONResponse(w, 200, resp)
 		return
 	}
@@ -273,34 +246,108 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := Message{
-		Status:  true,
-		Message: "Login Successfull",
-	}
-
+	resp := app.sendMessage(true, "Login Successfull")
 	app.sendJSONResponse(w, 200, resp)
 }
 
 func (app *application) UserLogout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		app.CustomError(w, "Method Not allowed", 403)
-		return
-	}
-
 	authHeader := r.Header.Get("Authorization")
 	token := app.user.CheckBearerToken(authHeader)
-	if token == "" {
-		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
-		return
+	if token != "" {
+		err := app.user.Logout(token)
+		if err != nil {
+			app.serverError(w, err)
+			return
+		}
 	}
 
-	err := app.user.Logout(token)
+	resp := app.sendMessage(true, "Logout Successfull")
+	app.sendJSONResponse(w, 200, resp)
+}
+
+func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
 	if err != nil {
-		app.serverError(w, err)
+		app.errorLog.Println("Error parsing form data:", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	fmt.Println("User logout Succefully")
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
+	}
+	password := r.FormValue("password")
+	repeatPassword := r.FormValue("repeatPassword")
+	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
+	if validator.Errors["password"] == "" {
+		validator.CheckField(validator.MaxChars(password, 15), "password", "Password should not be less than than 15 character")
+	}
+
+	validator.CheckField(validator.NotBlank(repeatPassword), "repeatPassword", "Empty Repeat Password")
+	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {
+		if password != repeatPassword {
+			validator.Errors["repeatPassword"] = "Password not matched"
+		}
+	}
+
+	if !validator.Valid() {
+		app.sendJSONResponse(w, 200, validator)
+		return
+	}
+	params := httprouter.ParamsFromContext(r.Context())
+	uri := params.ByName("uri")
+
+	uid, err := app.user.ForgetPasswordUri(uri)
+	if err != nil {
+		app.notFound(w)
+		return
+	}
+
+	err = app.user.NewPassword(password, uid)
+	if err != nil {
+		app.CustomError(w, "Internal Server Error"+err.Error(), 500)
+		return
+	}
+
+	resp := app.sendMessage(true, "Password Changed Successfully")
+	app.sendJSONResponse(w, 200, resp)
+}
+
+func (app *application) ForgetPasswordPost(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		app.errorLog.Println("Error parsing form data:", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
+	}
+	email := r.FormValue("email")
+	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
+	if validator.Errors["email"] == "" {
+		validator.CheckField(validator.ValidEmail(email), "email", "Invalid email")
+	}
+
+	if !validator.Valid() {
+		app.sendJSONResponse(w, 200, validator)
+		return
+	}
+
+	uid := app.user.EmailExist(email)
+	if uid > 0 {
+		token := fmt.Sprintf("%s_%d", email, uid)
+		uri := app.generateHash(token, r.RemoteAddr)
+		rows, err := app.user.ForgetPassword(uid, uri)
+		if err != nil || rows == 0 {
+			app.CustomError(w, "Internal Server Error", 400)
+		}
+	}
+
+	// whether email is registered or not we will show same success message
+	resp := app.sendMessage(true, "If email is registered email you will get link on your email")
+	app.sendJSONResponse(w, 200, resp)
 }
 
 // create  a token for login, user_verification
@@ -319,4 +366,11 @@ func (app *application) sendJSONResponse(w http.ResponseWriter, statusCode int, 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(message)
+}
+
+func (app *application) sendMessage(status bool, message string) Message {
+	return Message{
+		Status:  status,
+		Message: message,
+	}
 }

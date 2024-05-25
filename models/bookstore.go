@@ -6,27 +6,19 @@ import (
 )
 
 type Book struct {
-	ISBN   string  `json:"isbn"`
-	Title  string  `json:"title"`
-	Author string  `json:"author"`
-	Price  float32 `json:"price"`
+	ISBN         string  `json:"isbn"`
+	Title        string  `json:"title"`
+	Author       string  `json:"author"`
+	Price        float32 `json:"price"`
+	Descriptions string  `json:"descriptions"`
+	Genre        string  `json:"genre"`
 }
 
-// type BookModels interface {
-// 	InsertBook(*Book) (int, error)
-// 	BookExist(string) (int, error)
-// 	GET(string) (*Book, error)
-// 	BooksListing(string) ([]*Book, error)
-// }
-
-// Define a new BookModel type which wraps a database connection pool.
 type BookModel struct {
 	DB *sql.DB
 }
 
-// We'll use the Insert method to add a new record to the "bookstore" table.
 func (m *BookModel) InsertBook(ISBN, Author, Title, Genre, Descriptions string, Price float64, User_id int) (bool, error) {
-
 	result, err := m.DB.Exec("INSERT INTO `reviews` (`isbn`,`price`,`title`,`author`,`genre`,`descriptions`,`uid`) VALUES (?,?,?,?,?,?,? )", ISBN, Price, Title, Author, Genre, Descriptions, User_id)
 	if err != nil {
 		return false, err
@@ -60,9 +52,8 @@ func (m *BookModel) BookExist(ISBN string) (int64, error) {
 }
 
 func (m *BookModel) GET(ISBN string) (*Book, error) {
-
 	bk := &Book{}
-	err := m.DB.QueryRow("SELECT ISBN,Title,author,price FROM `reviews` WHERE  `ISBN` = ?", ISBN).Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price)
+	err := m.DB.QueryRow("SELECT isbn, title, author, price, descriptions, genre FROM `reviews` WHERE  `ISBN` = ?", ISBN).Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price, &bk.Descriptions, &bk.Genre)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -71,38 +62,34 @@ func (m *BookModel) GET(ISBN string) (*Book, error) {
 		}
 	}
 
-	return bk, err
+	return bk, nil
 }
 
 func (m *BookModel) BooksListing() ([]*Book, error) {
-
-	rows, err := m.DB.Query("SELECT isbn, title, author, price FROM `reviews`")
+	rows, err := m.DB.Query("SELECT isbn, title, author, price, descriptions,genre FROM `reviews`")
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNoRecord
+			return nil, nil
 		} else {
 			return nil, err
 		}
 	}
-	defer rows.Close()
 
+	defer rows.Close()
 	bks := []*Book{}
 	for rows.Next() {
 		bk := &Book{}
-		_ = rows.Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price)
-
+		_ = rows.Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price, &bk.Descriptions, &bk.Genre)
 		bks = append(bks, bk)
 	}
 
 	if err = rows.Err(); err != nil {
-
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNoRecord
+			return nil, nil
 		} else {
 			return nil, err
-
 		}
-
 	}
+
 	return bks, err
 }
