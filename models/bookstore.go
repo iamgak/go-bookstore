@@ -3,7 +3,6 @@ package models
 import (
 	"database/sql"
 	"errors"
-	"log"
 )
 
 type Book struct {
@@ -19,19 +18,15 @@ type BookModel struct {
 	DB *sql.DB
 }
 
+// add books in db
 func (m *BookModel) CreateBook(book *Book) error {
 	_, err := m.DB.Exec("INSERT INTO `books` (`isbn`,`title`,`author`,`price`,`descriptions`,`genre`) VALUES (?,?,?,?,?,? )", &book.ISBN, &book.Title, &book.Author, &book.Price, &book.Descriptions, &book.Genre)
-	log.Printf("INSERT INTO `books` (`isbn`,`title`,`author`,`price`,`descriptions`,`genre`) VALUES (%s,%s,%s,%f,%s,%s )", book.ISBN, book.Title, book.Author, book.Price, book.Descriptions, book.Genre)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
+// check isbn already exist or not()
 func (m *BookModel) BookExist(ISBN string) bool {
 	var valid int
-	log.Printf("SELECT EXIST(SELECT 1 FROM `books` WHERE  `isbn` = %s)", ISBN)
 	_ = m.DB.QueryRow("SELECT 1 FROM `books` WHERE  `isbn` = ?", ISBN).Scan(&valid)
 	return valid > 0
 }
@@ -49,35 +44,6 @@ func (m *BookModel) GET(ISBN string) (*Book, error) {
 
 	return bk, nil
 }
-
-// func (m *BookModel) BooksListing(attr, valattr string) ([]*Book, error) {
-// 	rows, err := m.DB.Query("SELECT isbn, title, author, price, descriptions,genre FROM `reviews`")
-// 	if err != nil {
-// 		if errors.Is(err, sql.ErrNoRows) {
-// 			return nil, nil
-// 		} else {
-// 			return nil, err
-// 		}
-// 	}
-
-// 	defer rows.Close()
-// 	bks := []*Book{}
-// 	for rows.Next() {
-// 		bk := &Book{}
-// 		_ = rows.Scan(&bk.ISBN, &bk.Title, &bk.Author, &bk.Price, &bk.Descriptions, &bk.Genre)
-// 		bks = append(bks, bk)
-// 	}
-
-// 	if err = rows.Err(); err != nil {
-// 		if errors.Is(err, sql.ErrNoRows) {
-// 			return nil, nil
-// 		} else {
-// 			return nil, err
-// 		}
-// 	}
-
-// 	return bks, err
-// }
 
 func (m *BookModel) BooksListing() ([]*Book, error) {
 	stmt := "SELECT isbn, title, genre, price, descriptions FROM books"

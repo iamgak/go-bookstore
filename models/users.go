@@ -2,15 +2,30 @@ package models
 
 import (
 	"database/sql"
-	// "log"
+	"log"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-type User struct {
-	Id    int
+type UserLogin struct {
+	Email    string
+	Password string
+}
+
+type ForgetPassword struct {
 	Email string
+}
+
+type UserRegister struct {
+	Email          string
+	Password       string
+	RepeatPassword string
+}
+
+type UserNewPassword struct {
+	Password       string
+	RepeatPassword string
 }
 
 // to use main db that initialised in main.go
@@ -18,21 +33,17 @@ type UserModel struct {
 	DB *sql.DB
 }
 
-func (m *UserModel) InsertUser(email, password, hashed string) (bool, error) {
+func (m *UserModel) InsertUser(email, password, hashed string) error {
 	HashedPassword, err := m.GeneratePassword(password)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	_, err = m.DB.Exec("INSERT INTO users(`email`,`password`,`activation_token`) VALUES (?, ?,? )", email, string(HashedPassword), hashed)
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return err
 }
 
-func (m *UserModel) CreateAuthHeader(token string, uid int) error {
+func (m *UserModel) SetLoginToken(token string, uid int) error {
 	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = ? WHERE `id` = ?", token, uid)
 	if err != nil {
 		return err
@@ -40,17 +51,21 @@ func (m *UserModel) CreateAuthHeader(token string, uid int) error {
 	return nil
 }
 
+// logout
 func (m *UserModel) Logout(token string) error {
-	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = NULL WHERE `token` = ?", token)
+	log.Printf("UPDATE `users` SET `login_token` = NULL WHERE `login_token` = %s", token)
+	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = NULL WHERE `login_token` = ?", token)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (m *UserModel) Authenticate(email, password string) (int, error) {
+
+// login
+func (m *UserModel) Login(creds *UserLogin) (int, error) {
 	var databasePassword string
 	var uid int
-	err := m.DB.QueryRow("SELECT password, id FROM `users` WHERE `active` = 1 AND `email` = ? ", strings.TrimSpace(email)).Scan(&databasePassword, &uid)
+	err := m.DB.QueryRow("SELECT password, id FROM `users` WHERE `active` = 1 AND `email` = ? ", strings.TrimSpace(creds.Email)).Scan(&databasePassword, &uid)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nil
@@ -58,8 +73,7 @@ func (m *UserModel) Authenticate(email, password string) (int, error) {
 		return 0, err
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(databasePassword), []byte(password))
-	// err = bcrypt.CompareHashAndPassword(currentHashedPassword, []byte(currentPassword))
+	err = bcrypt.CompareHashAndPassword([]byte(databasePassword), []byte(creds.Password))
 	if err != nil {
 		if err == bcrypt.ErrMismatchedHashAndPassword {
 			return 0, nil

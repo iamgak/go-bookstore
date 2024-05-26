@@ -4,15 +4,11 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
-	"net/http"
-
-	// "regexp"
 	"github.com/julienschmidt/httprouter"
+	"net/http"
 	"strconv"
 	"test.iamgak.net/models"
 	"test.iamgak.net/validator"
-
-	// "strings"
 	"time"
 )
 
@@ -21,6 +17,7 @@ type Message struct {
 	Message string `json:"message"`
 }
 
+// home page
 func (app *application) Home(w http.ResponseWriter, r *http.Request) {
 	resp := Message{
 		Status:  true,
@@ -30,21 +27,7 @@ func (app *application) Home(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, &resp)
 }
 
-// bookListing related handlers
-func (app *application) BookListing(w http.ResponseWriter, r *http.Request) {
-	params := httprouter.ParamsFromContext(r.Context())
-	isbn := params.ByName("isbn")
-	bks, err := app.books.GetBookByIsbn(isbn)
-	if err != nil {
-		app.errorLog.Print("internal server error")
-		app.CustomError(w, "Internal Server Error", 500)
-		return
-	}
-
-	app.sendJSONResponse(w, 200, bks)
-}
-
-// listing
+// all the review listing
 func (app *application) ReviewListing(w http.ResponseWriter, r *http.Request) {
 	bks, err := app.review.ReviewListing()
 	if err != nil {
@@ -56,6 +39,7 @@ func (app *application) ReviewListing(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, bks)
 }
 
+// logged user review
 func (app *application) MyReview(w http.ResponseWriter, r *http.Request) {
 	uid := app.ValidToken(w, r)
 	if uid == 0 {
@@ -73,6 +57,7 @@ func (app *application) MyReview(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, bks)
 }
 
+// search by isbn only
 func (app *application) ReviewSearch(w http.ResponseWriter, r *http.Request) {
 	params := httprouter.ParamsFromContext(r.Context())
 	isbn := params.ByName("isbn")
@@ -110,6 +95,80 @@ func (app *application) DeleteReview(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, resp)
 }
 
+// create new review
+func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
+	uid := app.ValidToken(w, r)
+	if uid == 0 {
+		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
+		return
+	}
+
+	var CreateReview *models.Review
+	err := json.NewDecoder(r.Body).Decode(&CreateReview)
+	if err != nil {
+		app.errorLog.Print(err)
+		app.CustomError(w, "header should be application/json and all the field should be in proper format", 400)
+		return
+	}
+
+	CreateReview.Uid = uid
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
+	}
+
+	validator.CheckField(validator.NotBlank(CreateReview.Isbn), "isbn", "Please, fill the isbn field")
+	validator.CheckField(validator.NotBlank(CreateReview.Descriptions), "descriptions", "Please, fill the descriptions field")
+	validator.CheckField(validator.NotBlank(CreateReview.Title), "title", "Please, fill the title field")
+
+	if validator.Errors["isbn"] == "" {
+		validator.CheckField(validator.MaxChars(CreateReview.Title, 20), "isbn", "Please, fill the ISBN shorter than 20")
+	}
+
+	if validator.Errors["descriptions"] == "" {
+		validator.CheckField(validator.MaxChars(CreateReview.Descriptions, 100), "isbn", "Please, fill the ISBN shorter than 100")
+	}
+
+	if validator.Errors["title"] == "" {
+		validator.CheckField(validator.MaxChars(CreateReview.Title, 50), "title", "Please, fill the TITLE shorter than 50")
+	}
+
+	if validator.Valid() {
+		book_id := app.books.BookExist(CreateReview.Isbn)
+		if book_id {
+			validator.Errors["isbn"] = "isbn already Exist"
+		}
+	}
+
+	if !validator.Valid() {
+		app.sendJSONResponse(w, 200, validator)
+		return
+	}
+
+	err = app.review.CreateReview(CreateReview)
+	if err != nil {
+		app.CustomError(w, "Server Issue", 500)
+		return
+	}
+
+	resp := app.sendMessage(true, "Review Saved")
+	app.sendJSONResponse(w, 200, resp)
+}
+
+// bookListing related handlers
+func (app *application) BookListing(w http.ResponseWriter, r *http.Request) {
+	params := httprouter.ParamsFromContext(r.Context())
+	isbn := params.ByName("isbn")
+	bks, err := app.books.GetBookByIsbn(isbn)
+	if err != nil {
+		app.errorLog.Print("internal server error")
+		app.CustomError(w, "Internal Server Error", 500)
+		return
+	}
+
+	app.sendJSONResponse(w, 200, bks)
+}
+
+// book info based on isbn
 func (app *application) BookInfo(w http.ResponseWriter, r *http.Request) {
 	params := httprouter.ParamsFromContext(r.Context())
 	isbn := params.ByName("isbn")
@@ -132,68 +191,7 @@ func (app *application) BookInfo(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, info)
 }
 
-func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
-	uid := app.ValidToken(w, r)
-	if uid == 0 {
-		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
-		return
-	}
-
-	validator := &validator.Validator{
-		Errors: make(map[string]string),
-	}
-	isbn := r.FormValue("isbn")
-	title := r.FormValue("title")
-	// rating := r.FormValue("rating")
-	descriptions := r.FormValue("descriptions")
-	price, err := strconv.ParseFloat(r.FormValue("price"), 32)
-	if err != nil {
-		validator.Errors["price"] = "Invalid price value"
-	}
-	rating, err := strconv.ParseFloat(r.FormValue("rating"), 32)
-	if err != nil {
-		validator.Errors["rating"] = "Invalid rating value"
-	}
-
-	validator.CheckField(validator.NotBlank(isbn), "isbn", "Please, fill the isbn field")
-	validator.CheckField(validator.NotBlank(descriptions), "descriptions", "Please, fill the descriptions field")
-	validator.CheckField(validator.NotBlank(title), "title", "Please, fill the title field")
-
-	if validator.Errors["isbn"] == "" {
-		validator.CheckField(validator.MaxChars(isbn, 20), "isbn", "Please, fill the ISBN shorter than 20")
-	}
-
-	if validator.Errors["descriptions"] == "" {
-		validator.CheckField(validator.MaxChars(descriptions, 100), "isbn", "Please, fill the ISBN shorter than 100")
-	}
-
-	if validator.Errors["title"] == "" {
-		validator.CheckField(validator.MaxChars(title, 50), "title", "Please, fill the TITLE shorter than 50")
-	}
-
-	if !validator.Valid() {
-		app.sendJSONResponse(w, 200, validator)
-		return
-	}
-
-	review := &models.Review{
-		Isbn:         isbn,
-		Title:        title,
-		Rating:       float32(rating),
-		Price:        float32(price),
-		Descriptions: descriptions,
-		Uid:          uid,
-	}
-	err = app.review.CreateReview(review)
-	if err != nil {
-		app.CustomError(w, "Server Issue", 500)
-		return
-	}
-
-	resp := app.sendMessage(true, "Review Saved")
-	app.sendJSONResponse(w, 200, resp)
-}
-
+// add book in db
 func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 	uid := app.ValidToken(w, r)
 	if uid == 0 {
@@ -201,43 +199,41 @@ func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isbn := r.FormValue("isbn")
-	title := r.FormValue("title")
-	author := r.FormValue("author")
-	genre := r.FormValue("genre")
-	descriptions := r.FormValue("descriptions")
+	var bookRegister *models.Book
+	err := json.NewDecoder(r.Body).Decode(&bookRegister)
+	if err != nil {
+		app.errorLog.Print(err)
+		app.CustomError(w, "Unsupported or empty fields", 400)
+		return
+	}
+
 	validator := &validator.Validator{
 		Errors: make(map[string]string),
 	}
 
-	validator.CheckField(validator.NotBlank(isbn), "isbn", "Please, fill the isbn field")
-	validator.CheckField(validator.NotBlank(genre), "genre", "Please, fill the genre field")
-	validator.CheckField(validator.NotBlank(descriptions), "descriptions", "Please, fill the descriptions field")
-	validator.CheckField(validator.NotBlank(author), "author", "Please, fill the author field")
-	validator.CheckField(validator.NotBlank(title), "title", "Please, fill the title field")
+	validator.CheckField(validator.NotBlank(bookRegister.ISBN), "isbn", "Please, fill the isbn field")
+	validator.CheckField(validator.NotBlank(bookRegister.Genre), "genre", "Please, fill the genre field")
+	validator.CheckField(validator.NotBlank(bookRegister.Descriptions), "descriptions", "Please, fill the descriptions field")
+	validator.CheckField(validator.NotBlank(bookRegister.Author), "author", "Please, fill the author field")
+	validator.CheckField(validator.NotBlank(bookRegister.Title), "title", "Please, fill the title field")
 
 	if validator.Errors["isbn"] == "" {
-		validator.CheckField(validator.MaxChars(isbn, 20), "isbn", "Please, fill the ISBN shorter than 20")
+		validator.CheckField(validator.MaxChars(bookRegister.Title, 20), "isbn", "Please, fill the ISBN shorter than 20")
 	}
 
 	if validator.Errors["descriptions"] == "" {
-		validator.CheckField(validator.MaxChars(descriptions, 100), "isbn", "Please, fill the ISBN shorter than 100")
+		validator.CheckField(validator.MaxChars(bookRegister.Descriptions, 100), "isbn", "Please, fill the ISBN shorter than 100")
 	}
 
 	if validator.Errors["author"] == "" {
-		validator.CheckField(validator.MaxChars(author, 50), "author", "Please, fill the AUTHOR shorter than 50")
+		validator.CheckField(validator.MaxChars(bookRegister.Author, 50), "author", "Please, fill the AUTHOR shorter than 50")
 	}
 	if validator.Errors["title"] == "" {
-		validator.CheckField(validator.MaxChars(title, 50), "title", "Please, fill the TITLE shorter than 50")
-	}
-
-	price, err := strconv.ParseFloat(r.FormValue("price"), 32)
-	if err != nil {
-		validator.Errors["price"] = "Invalid price value"
+		validator.CheckField(validator.MaxChars(bookRegister.Title, 50), "title", "Please, fill the TITLE shorter than 50")
 	}
 
 	if validator.Valid() {
-		book_id := app.books.BookExist(isbn)
+		book_id := app.books.BookExist(bookRegister.ISBN)
 		if book_id {
 			validator.Errors["isbn"] = "isbn already Exist"
 		}
@@ -248,16 +244,7 @@ func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bookInfo := &models.Book{
-		ISBN:         isbn,
-		Title:        title,
-		Genre:        genre,
-		Price:        float32(price),
-		Descriptions: descriptions,
-		Author:       author,
-	}
-
-	err = app.books.CreateBook(bookInfo)
+	err = app.books.CreateBook(bookRegister)
 	if err != nil {
 		app.CustomError(w, "Server Issue1", 500)
 		return
@@ -267,6 +254,7 @@ func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, resp)
 }
 
+// register user
 func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
@@ -275,29 +263,34 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := r.FormValue("email")
-	password := r.FormValue("password")
-	repeatPassword := r.FormValue("repeatPassword")
+	var creds *models.UserRegister
+	err = json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		app.errorLog.Print(err)
+		app.CustomError(w, "Unsupported or empty fields", 400)
+		return
+	}
+
 	validator := &validator.Validator{
 		Errors: make(map[string]string),
 	}
 
-	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
-	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
-	validator.CheckField(validator.NotBlank(repeatPassword), "repeatPassword", "Please, fill the repeat password field")
+	validator.CheckField(validator.NotBlank(creds.Email), "email", "Please, fill the email field")
+	validator.CheckField(validator.NotBlank(creds.Password), "password", "Please, fill the password field")
+	validator.CheckField(validator.NotBlank(creds.RepeatPassword), "repeatPassword", "Please, fill the repeat password field")
 	if validator.Errors["password"] == "" {
-		validator.CheckField(validator.ValidPassword(password), "password", "Password should be greater than 6 character must contain alphanumeric char, one special char")
+		validator.CheckField(validator.ValidPassword(creds.Password), "password", "Password should be greater than 4 character ")
 	}
 
 	if validator.Errors["email"] == "" {
-		validator.CheckField(validator.ValidEmail(email), "email", "Invalid Email Format")
+		validator.CheckField(validator.ValidEmail(creds.Email), "email", "Invalid Email Format")
 	}
-	if app.user.EmailExist(email) != 0 {
+	if app.user.EmailExist(creds.Email) != 0 {
 		validator.CheckField(false, "email", "Email already registered")
 	}
 
 	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {
-		if password != repeatPassword {
+		if creds.Password != creds.RepeatPassword {
 			validator.Errors["repeatPassword"] = "Password not matched"
 		}
 	}
@@ -308,8 +301,8 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uri := app.generateHash(r.RemoteAddr, r.URL.Port())
-	exist, err := app.user.InsertUser(email, password, uri)
-	if err != nil || !exist {
+	err = app.user.InsertUser(creds.Email, creds.Password, uri)
+	if err != nil {
 		app.serverError(w, err)
 		return
 	}
@@ -322,6 +315,7 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, resp)
 }
 
+// after registration user need to validate using link save in users table respective email
 func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
 	params := httprouter.ParamsFromContext(r.Context())
 	uri := params.ByName("uri")
@@ -330,7 +324,6 @@ func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.infoLog.Print("hello")
 	err := app.user.AccountActivate(uri)
 	if err != nil {
 		app.notFound(w)
@@ -341,6 +334,7 @@ func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, resp)
 }
 
+// login
 func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
@@ -348,36 +342,43 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+	var creds *models.UserLogin
+	err = json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		app.errorLog.Print(err)
+		app.CustomError(w, "Unsupported or empty fields", 400)
+		return
+	}
 
 	validator := &validator.Validator{
 		Errors: make(map[string]string),
 	}
 
-	email := r.FormValue("email")
-	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
-	if validator.Errors["email"] == "" {
-		validator.CheckField(validator.ValidEmail(email), "email", "Invalid email")
+	validator.CheckField(validator.NotBlank(creds.Email), "email", "Please, fill the email field")
+	validator.CheckField(validator.NotBlank(creds.Password), "password", "Please, fill the password field")
+	if validator.Errors["password"] == "" {
+		validator.CheckField(validator.ValidPassword(creds.Password), "password", "Password should be greater than 4 character ")
 	}
 
-	password := r.FormValue("password")
-	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
+	if validator.Errors["email"] == "" {
+		validator.CheckField(validator.ValidEmail(creds.Email), "email", "Invalid Email Format")
+	}
 
 	if !validator.Valid() {
 		app.sendJSONResponse(w, 200, validator)
 		return
 	}
 
-	uid := app.user.EmailExist(email)
+	uid := app.user.EmailExist(creds.Email)
 	if uid == 0 {
 		resp := app.sendMessage(false, "Incorrect Credentials")
 		app.sendJSONResponse(w, 200, resp)
 		return
 	}
 
-	uid, err = app.user.Authenticate(email, password)
+	uid, err = app.user.Login(creds)
 	if err != nil {
-		resp := app.sendMessage(false, err.Error())
-		app.sendJSONResponse(w, 200, resp)
+		app.CustomError(w, "Internal Server Error", 500)
 		return
 	}
 
@@ -388,7 +389,7 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hashed := app.generateHash(r.RemoteAddr, r.URL.Port())
-	err = app.user.CreateAuthHeader(hashed, uid)
+	err = app.user.SetLoginToken(hashed, uid)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -415,35 +416,15 @@ func (app *application) UserLogout(w http.ResponseWriter, r *http.Request) {
 	app.sendJSONResponse(w, 200, resp)
 }
 
+// after forget password it create uri in db like /new_password/db_uri
 func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
 		app.errorLog.Println("Error parsing form data:", err)
-		app.CustomError(w, "Bad request", http.StatusBadRequest)
+		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	validator := &validator.Validator{
-		Errors: make(map[string]string),
-	}
-	password := r.FormValue("password")
-	repeatPassword := r.FormValue("repeatPassword")
-	validator.CheckField(validator.NotBlank(password), "password", "Please, fill the password field")
-	if validator.Errors["password"] == "" {
-		validator.CheckField(validator.MaxChars(password, 15), "password", "Password should not be less than than 15 character")
-	}
-
-	validator.CheckField(validator.NotBlank(repeatPassword), "repeatPassword", "Empty Repeat Password")
-	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {
-		if password != repeatPassword {
-			validator.Errors["repeatPassword"] = "Password not matched"
-		}
-	}
-
-	if !validator.Valid() {
-		app.sendJSONResponse(w, 200, validator)
-		return
-	}
 	params := httprouter.ParamsFromContext(r.Context())
 	uri := params.ByName("uri")
 
@@ -453,7 +434,36 @@ func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = app.user.NewPassword(password, uid)
+	var creds *models.UserNewPassword
+	err = json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		app.errorLog.Print(err)
+		app.CustomError(w, "Unsupported or empty fields", 400)
+		return
+	}
+
+	validator := &validator.Validator{
+		Errors: make(map[string]string),
+	}
+
+	validator.CheckField(validator.NotBlank(creds.Password), "password", "Please, fill the password field")
+	if validator.Errors["password"] == "" {
+		validator.CheckField(validator.ValidPassword(creds.Password), "password", "Password should be greater than 4 character ")
+	}
+
+	validator.CheckField(validator.NotBlank(creds.RepeatPassword), "repeatPassword", "Please, fill the password field")
+	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {
+		if creds.Password != creds.RepeatPassword {
+			validator.Errors["repeatPassword"] = "Password not matched"
+		}
+	}
+
+	if !validator.Valid() {
+		app.sendJSONResponse(w, 200, validator)
+		return
+	}
+
+	err = app.user.NewPassword(creds.Password, uid)
 	if err != nil {
 		app.CustomError(w, "Internal Server Error"+err.Error(), 500)
 		return
@@ -463,6 +473,7 @@ func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) 
 	app.sendJSONResponse(w, 200, resp)
 }
 
+// it will create a uri if email is valid and active user
 func (app *application) ForgetPasswordPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
@@ -471,23 +482,28 @@ func (app *application) ForgetPasswordPost(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	var creds *models.ForgetPassword
+	err = json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		app.errorLog.Print(err)
+		app.CustomError(w, "Empty field / Unsupported Content-Type", 400)
+		return
+	}
+
 	validator := &validator.Validator{
 		Errors: make(map[string]string),
 	}
-	email := r.FormValue("email")
-	validator.CheckField(validator.NotBlank(email), "email", "Please, fill the email field")
-	if validator.Errors["email"] == "" {
-		validator.CheckField(validator.ValidEmail(email), "email", "Invalid email")
-	}
+
+	validator.CheckField(validator.NotBlank(creds.Email), "email", "Please, fill the email field")
 
 	if !validator.Valid() {
 		app.sendJSONResponse(w, 200, validator)
 		return
 	}
 
-	uid := app.user.EmailExist(email)
+	uid := app.user.EmailExist(creds.Email)
 	if uid > 0 {
-		token := fmt.Sprintf("%s_%d", email, uid)
+		token := app.generateHash(creds.Email, r.RemoteAddr)
 		uri := app.generateHash(token, r.RemoteAddr)
 		err := app.user.ForgetPassword(uid, uri)
 		if err != nil {
@@ -500,7 +516,7 @@ func (app *application) ForgetPasswordPost(w http.ResponseWriter, r *http.Reques
 	app.sendJSONResponse(w, 200, resp)
 }
 
-// create  a token for login, user_verification
+// create a token for login, user_verification
 func (app *application) generateHash(addr, port string) string {
 	data := addr + port + strconv.FormatInt(time.Now().Unix(), 10)
 	hasher := sha1.New()
@@ -512,12 +528,14 @@ func (app *application) generateHash(addr, port string) string {
 	return hashStr
 }
 
+// to print json message
 func (app *application) sendJSONResponse(w http.ResponseWriter, statusCode int, message any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(message)
 }
 
+// create a struct Message to send data in sendJSONResponse
 func (app *application) sendMessage(status bool, message string) Message {
 	return Message{
 		Status:  status,

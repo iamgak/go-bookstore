@@ -19,8 +19,9 @@ type ReviewModel struct {
 	DB *sql.DB
 }
 
+// create new review
 func (m *ReviewModel) CreateReview(review *Review) error {
-	_, err := m.DB.Exec("INSERT INTO `reviews` (`isbn`,`price`,`title`,`rating`,`descriptions`,`uid`) VALUES (?,?,?,?,?,?,? )", &review.Isbn, &review.Price, &review.Title, &review.Rating, &review.Descriptions, &review.Uid)
+	_, err := m.DB.Exec("INSERT INTO `reviews` (`isbn`,`price`,`title`,`rating`,`descriptions`,`uid`) VALUES (?,?,?,?,?,? )", &review.Isbn, &review.Price, &review.Title, &review.Rating, &review.Descriptions, &review.Uid)
 	return err
 }
 
@@ -28,14 +29,16 @@ func (m *ReviewModel) DeleteReview(id, uid int) error {
 	_, err := m.DB.Exec("UPDATE `reviews` SET is_deleted = 1 WHERE  `id` = ? AND uid = ? ", id, uid)
 	return err
 }
+
 func (m *ReviewModel) ReviewListing() ([]*Review, error) {
-	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM `reviews`"
+	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM `reviews` WHERE is_deleted = 0"
 	reviews, err := m.Listing(stmt)
 	return reviews, err
 }
 
+// if user logged it will show its review
 func (m *ReviewModel) MyReview(uid int) ([]*Review, error) {
-	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM reviews WHERE uid = '" + strconv.Itoa(uid) + "'"
+	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM reviews WHERE is_deleted = 0 AND  uid = '" + strconv.Itoa(uid) + "'"
 	reviews, err := m.Listing(stmt)
 	return reviews, err
 }
@@ -67,7 +70,7 @@ func (m *ReviewModel) Listing(stmt string) ([]*Review, error) {
 }
 
 func (m *ReviewModel) GetReviewByIsbn(isbn string) ([]*Review, error) {
-	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM reviews WHERE isbn = '" + isbn + "'"
+	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM reviews WHERE isbn = '" + isbn + "' AND is_deleted = 0"
 	review, err := m.Listing(stmt)
 	return review, err
 }
