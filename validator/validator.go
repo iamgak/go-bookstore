@@ -43,17 +43,9 @@ func (v *Validator) ValidEmail(email string) bool {
 }
 
 func (v *Validator) ValidPassword(password string) bool {
-	// Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character
-	regex := regexp.MustCompile(`^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$`)
-	return regex.MatchString(password)
-}
-
-// PermittedInt() returns true if a value is in a list of permitted integers.
-func PermittedInt(value int, permittedValues ...int) bool {
-	for i := range permittedValues {
-		if value == permittedValues[i] {
-			return true
-		}
+	if len(password) <= 4 {
+		return false
 	}
-	return false
+	// Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character
+	return true
 }

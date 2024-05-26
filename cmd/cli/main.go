@@ -20,13 +20,14 @@ type application struct {
 	db        *sql.DB
 	books     *models.BookModel
 	user      *models.UserModel
+	review    *models.ReviewModel
 	validator *validator.Validator
 }
 
 func main() {
 
 	addr := flag.String("addr", ":4000", "HTTP network address")
-	dsn := flag.String("dsn", "root:@/bookreview?parseTime=true", "MySQL data source name")
+	dsn := flag.String("dsn", "root:@/bookstore?parseTime=true", "MySQL data source name")
 	flag.Parse()
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
@@ -43,6 +44,7 @@ func main() {
 		db:        db,
 		user:      &models.UserModel{DB: db},
 		books:     &models.BookModel{DB: db},
+		review:    &models.ReviewModel{DB: db},
 		validator: &validator.Validator{Errors: make(map[string]string)},
 	}
 

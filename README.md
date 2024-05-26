@@ -1,54 +1,72 @@
-# go-bookstore
- Golang BookStore CLI RESTful APIs 
- Welcome to the GoLang Bookstore project! This is a simple implementation of a bookstore management system written in GoLang.
+# Book Review System
+
+Welcome to the Book Review System project! This system allows users to log in, review books, and perform other related actions.
 
 ## Features
-- Add new books to the inventory
-- View existing books in the inventory
-- Update book information
-- Delete books from the inventory
-- Search for books by title, author, or category
+- User authentication: Users can register, log in, and log out securely.
+- Book review: Users can read and write reviews for books.
+- Book rating: Users can rate books and see the average rating.
+- Book search: Users can search for books by title, author, or genre.
+- User profile: Users can view and update their few profile information.
+
+## Technologies Used
+- GoLang: Backend development
+- HTML/CSS/JavaScript: Frontend development
+- MySQL: Database management
+<!-- - JWT (JSON Web Tokens): Authentication mechanism -->
 
 ## Getting Started
 
 ### Prerequisites
 - GoLang installed on your system. You can download it from [here](https://golang.org/dl/).
-- Git installed on your system. You can download it from [here](https://git-scm.com/downloads).
+- PostgreSQL installed on your system. You can download it from [here](https://www.postgresql.org/download/).
+- Node.js and npm installed on your system for frontend development.
 
 ### Installation
 1. Clone the repository:
     ```bash
-    git clone <repository_url>
+    git clone github.com/iamgak/go-bookreview
     ```
 
 2. Navigate to the project directory:
     ```bash
-    cd golang-bookstore
+    cd go-bookreview
     ```
 
-3. Build the project:
+3. Set up the database:
+    - Create a MySQL database named `go-bookreview`.
+    - Import the database schema from `database/schema.sql`.
+
+
+4. Install dependencies:
     ```bash
-    go build
+    go mod tidy
     ```
 
-4. Run the project:
+5. Run the server:
     ```bash
-    ./golang-bookstore
+    go run cmd/cli
     ```
+    optional if you want to change port number and root info
+    ```bash
+
+    go run cmd/cli -addr=":8000" -dsn=""root:@/bookstore?parseTime=true"
+    ```
+
+5. Access the application:
+    Open your web browser and navigate to `http://localhost:8000`.
 
 ### Usage
-Once the project is up and running, you can use the following commands to interact with the bookstore:
+- Register a new user account By PostMethod `http://localhost:8000/user/register`.
+- Login in with existing credentials By PostMethod `http://localhost:8000/user/login`.
+- Browse all reviews By GetMethod `http://localhost:8000/book/listing`.
+- Delete reviews By GetMethod `http://localhost:8000/book/delete/id`.
+- Browse reviews By ISBN or Author or Book GetMethod `http://localhost:8000/book/isbn/934-3434` or `http://localhost:8000/book/author/murakami` .
+- Write reviews for books you've read By PostMethod After Login `http://localhost:8000/book/create` .
+- Browse reviews By GetMethod
+- Request Forget Password By PostMethod  `http://localhost:8000/user/forget_password/`token send on given email if registered but in this case you will copy it from table forget_passw during new password .
+- Change Forget Password By PostMethod  `http://localhost:8000/user/new_password/token` token from forget_password .
 
-- `add`: Add a new book to the inventory.
-- `view`: View all books in the inventory.
-- `update`: Update information of an existing book.
-- `delete`: Delete a book from the inventory.
-- `search`: Search for books by title, author, or category.
+## Contributing
+Contributions are welcome! If you'd like to contribute to this project, please fork the repository and submit a pull request with your changes.
 
-Example usage:
-```bash
-./golang-bookstore add
-./golang-bookstore view
-./golang-bookstore update
-./golang-bookstore delete
-./golang-bookstore search

@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/julienschmidt/httprouter"
 	"net/http"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 func (app *application) routes() http.Handler {
@@ -11,15 +12,23 @@ func (app *application) routes() http.Handler {
 		app.notFound(w)
 	})
 
+	//home related routes
 	router.HandlerFunc(http.MethodGet, "/", app.Home)
-	router.HandlerFunc(http.MethodGet, "/book/listing", app.BooksListing)
-	router.HandlerFunc(http.MethodGet, "/book/info/:isbn", app.BooksInfo)
-	router.HandlerFunc(http.MethodPost, "/book/create", app.AddBooks)
-	router.HandlerFunc(http.MethodPost, "/user/register", app.UserRegister)
-	router.HandlerFunc(http.MethodPost, "/user/forget_password/", app.ForgetPasswordPost)
-	router.HandlerFunc(http.MethodPost, "/user/new_password/:uri", app.NewPasswordPost)
-	router.HandlerFunc(http.MethodGet, "/user/activation/:uri", app.UserActivation)
-	router.HandlerFunc(http.MethodPost, "/user/login", app.UserLogin)
-	router.HandlerFunc(http.MethodPost, "/user/logout", app.UserLogout)
+	//books related routes
+	router.HandlerFunc(http.MethodGet, "/book/listing", app.BookListing) // all the book listing
+	router.HandlerFunc(http.MethodPost, "/book/create", app.AddBook)     // create a new book info different isbn
+	//review related routes
+	router.HandlerFunc(http.MethodGet, "/review/listing", app.ReviewListing)       // all the reviews
+	router.HandlerFunc(http.MethodGet, "/myreview/", app.MyReview)                 // review of logged in user
+	router.HandlerFunc(http.MethodGet, "/review/listing/:isbn/", app.ReviewSearch) // review of given isbn
+	router.HandlerFunc(http.MethodPost, "/review/create", app.AddReview)           // create review
+	router.HandlerFunc(http.MethodPost, "/review/delete/:id", app.DeleteReview)    // delete your own review
+	//user related routes
+	router.HandlerFunc(http.MethodPost, "/user/forget_password/", app.ForgetPasswordPost) // to create forget password request
+	router.HandlerFunc(http.MethodPost, "/user/register", app.UserRegister)               // to register
+	router.HandlerFunc(http.MethodPost, "/user/new_password/:uri", app.NewPasswordPost)   //after forget password req uri created to change passw
+	router.HandlerFunc(http.MethodGet, "/user/activation/:uri", app.UserActivation)       // after registration uri created authentication
+	router.HandlerFunc(http.MethodPost, "/user/login", app.UserLogin)                     // login
+	router.HandlerFunc(http.MethodPost, "/user/logout", app.UserLogout)                   // logout
 	return router
 }
