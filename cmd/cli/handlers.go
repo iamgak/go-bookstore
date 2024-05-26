@@ -4,12 +4,13 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
-	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"strconv"
+	"time"
+
+	"github.com/julienschmidt/httprouter"
 	"test.iamgak.net/models"
 	"test.iamgak.net/validator"
-	"time"
 )
 
 type Message struct {
@@ -91,6 +92,7 @@ func (app *application) DeleteReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.user.ActivityLog("review_deleted", uid)
 	resp := app.sendMessage(true, "Review Deleted")
 	app.sendJSONResponse(w, 200, resp)
 }
@@ -150,6 +152,7 @@ func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.user.ActivityLog("review_created", uid)
 	resp := app.sendMessage(true, "Review Saved")
 	app.sendJSONResponse(w, 200, resp)
 }
@@ -394,6 +397,8 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 		app.serverError(w, err)
 		return
 	}
+
+	app.user.ActivityLog("logged_in", uid)
 
 	// Set bearer token in header and send response
 	w.Header().Set("Authorization", "Bearer "+hashed)

@@ -2,7 +2,6 @@ package models
 
 import (
 	"database/sql"
-	"log"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -53,7 +52,6 @@ func (m *UserModel) SetLoginToken(token string, uid int) error {
 
 // logout
 func (m *UserModel) Logout(token string) error {
-	log.Printf("UPDATE `users` SET `login_token` = NULL WHERE `login_token` = %s", token)
 	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = NULL WHERE `login_token` = ?", token)
 	if err != nil {
 		return err
@@ -142,6 +140,7 @@ func (m *UserModel) NewPassword(newPassword string, id int) error {
 	}
 
 	_, _ = m.DB.Exec("UPDATE `forget_passw` SET `superseded` =1 WHERE `uid` = ?", id)
+	m.ActivityLog("password_changed", id)
 	return nil
 }
 
@@ -155,4 +154,9 @@ func (m *UserModel) CheckBearerToken(token string) string {
 	}
 
 	return strings.TrimPrefix(token, "Bearer ")
+}
+
+func (m *UserModel) ActivityLog(activity string, uid int) {
+	_, _ = m.DB.Exec("UPDATE `user_log` SET superseded = 1 WHERE activity = ? AND uid = ?", activity, uid)
+	_, _ = m.DB.Exec("INSERT INTO `user_log` SET  activity = ? , uid = ?, superseded = 0", activity, uid)
 }

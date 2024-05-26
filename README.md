@@ -5,8 +5,8 @@ Welcome to the Book Store System project! This system allows users to log in/out
 ## Features
 - User authentication: Users can register, log in, and log out securely.
 - Book review: Users can read and write reviews for books.
-- Book rating: Users can rate books and see the average rating.
-- Book search: Users can search for books by isbn, author, or genre.
+- Book rating: Users can rate books.
+- Book search: Users can search for books by isbn.
 - User profile: Users can view and update their few profile information.
 
 ## Technologies Used
@@ -57,7 +57,7 @@ Welcome to the Book Store System project! This system allows users to log in/out
 
 ### Usage
 - Register a new user account By PostMethod `http://localhost:8000/user/register`.
-- Validate account By GetMethod `http://localhost:8000/user/activation/activation-token activation-token is in user table after registration in activation_token attribute`.
+- Validate account By GetMethod `http://localhost:8000/user/activation/activation-token` activation-token is in user table after registration in activation_token attribute.
 - Login/Logout in with existing credentials By PostMethod `http://localhost:8000/user/login` / `http://localhost:8000/user/logout`.
 - Browse all reviews By GetMethod `http://localhost:8000/review/listing`.
 - Delete reviews By GetMethod `http://localhost:8000/book/delete/id`.

@@ -2,7 +2,6 @@ package models
 
 import (
 	"database/sql"
-	"log"
 	"strconv"
 )
 
@@ -62,7 +61,6 @@ func (m *ReviewModel) Listing(stmt string) ([]*Review, error) {
 			return nil, err
 		}
 
-		log.Print(bk)
 		reviews = append(reviews, bk)
 	}
 
