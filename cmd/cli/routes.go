@@ -31,5 +31,5 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/user/activation/:uri", app.UserActivation)       // after registration uri created authentication
 	router.HandlerFunc(http.MethodPost, "/user/login", app.UserLogin)                     // login
 	router.HandlerFunc(http.MethodPost, "/user/logout", app.UserLogout)                   // logout
-	return router
+	return secureHeaders(router)
 }

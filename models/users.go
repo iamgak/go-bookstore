@@ -32,17 +32,21 @@ type UserModel struct {
 	DB *sql.DB
 }
 
-func (m *UserModel) InsertUser(email, password, hashed string) error {
+func (m *UserModel) InsertUser(email, password, hashed string) (int64, error) {
 	HashedPassword, err := m.GeneratePassword(password)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	_, err = m.DB.Exec("INSERT INTO users(`email`,`password`,`activation_token`) VALUES (?, ?,? )", email, string(HashedPassword), hashed)
-	return err
+	result, err := m.DB.Exec("INSERT INTO users(`email`,`password`,`activation_token`) VALUES (?, ?,? )", email, string(HashedPassword), hashed)
+	if err != nil {
+		return 0, err
+	}
+	uid, err := result.LastInsertId()
+	return uid, err
 }
 
-func (m *UserModel) SetLoginToken(token string, uid int) error {
+func (m *UserModel) SetLoginToken(token string, uid int64) error {
 	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = ? WHERE `id` = ?", token, uid)
 	if err != nil {
 		return err
@@ -51,8 +55,8 @@ func (m *UserModel) SetLoginToken(token string, uid int) error {
 }
 
 // logout
-func (m *UserModel) Logout(token string) error {
-	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = NULL WHERE `login_token` = ?", token)
+func (m *UserModel) Logout(uid int64) error {
+	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = NULL WHERE `id` = ?", uid)
 	if err != nil {
 		return err
 	}
@@ -60,9 +64,9 @@ func (m *UserModel) Logout(token string) error {
 }
 
 // login
-func (m *UserModel) Login(creds *UserLogin) (int, error) {
+func (m *UserModel) Login(creds *UserLogin) (int64, error) {
 	var databasePassword string
-	var uid int
+	var uid int64
 	err := m.DB.QueryRow("SELECT password, id FROM `users` WHERE `active` = 1 AND `email` = ? ", strings.TrimSpace(creds.Email)).Scan(&databasePassword, &uid)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -83,14 +87,14 @@ func (m *UserModel) Login(creds *UserLogin) (int, error) {
 	return uid, err
 }
 
-func (m *UserModel) EmailExist(email string) int {
-	var uid int
+func (m *UserModel) EmailExist(email string) int64 {
+	var uid int64
 	_ = m.DB.QueryRow("SELECT `id` FROM `users` WHERE  `email` = ?", email).Scan(&uid)
 	return uid
 }
 
-func (m *UserModel) ValidToken(token string) int {
-	var id int
+func (m *UserModel) ValidToken(token string) int64 {
+	var id int64
 	_ = m.DB.QueryRow("SELECT `id` FROM `users` WHERE `login_token` = ? ", token).Scan(&id)
 	return id
 }
@@ -111,14 +115,14 @@ func (m *UserModel) AccountActivate(token string) error {
 	return err
 }
 
-func (m *UserModel) ForgetPassword(uid int, uri string) error {
+func (m *UserModel) ForgetPassword(uid int64, uri string) error {
 	_, _ = m.DB.Exec("UPDATE `forget_passw` SET `superseded` = 1 WHERE `uid` = ?", uid)
 	_, err := m.DB.Exec("INSERT INTO `forget_passw` (`uid`,`uri`,`superseded`) VALUES(?,?,0) ", uid, uri)
 	return err
 }
 
-func (m *UserModel) ForgetPasswordUri(uri string) (int, error) {
-	var result int
+func (m *UserModel) ForgetPasswordUri(uri string) (int64, error) {
+	var result int64
 	err := m.DB.QueryRow("SELECT uid FROM `forget_passw` WHERE `uri` = ? AND `superseded` = 0", uri).Scan(&result)
 	if err != nil {
 		return 0, err
@@ -127,7 +131,7 @@ func (m *UserModel) ForgetPasswordUri(uri string) (int, error) {
 	return result, nil
 }
 
-func (m *UserModel) NewPassword(newPassword string, id int) error {
+func (m *UserModel) NewPassword(newPassword string, id int64) error {
 	newHashedPassword, err := m.GeneratePassword(newPassword)
 	if err != nil {
 		return err
@@ -156,7 +160,7 @@ func (m *UserModel) CheckBearerToken(token string) string {
 	return strings.TrimPrefix(token, "Bearer ")
 }
 
-func (m *UserModel) ActivityLog(activity string, uid int) {
+func (m *UserModel) ActivityLog(activity string, uid int64) {
 	_, _ = m.DB.Exec("UPDATE `user_log` SET superseded = 1 WHERE activity = ? AND uid = ?", activity, uid)
 	_, _ = m.DB.Exec("INSERT INTO `user_log` SET  activity = ? , uid = ?, superseded = 0", activity, uid)
 }

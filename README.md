@@ -12,6 +12,10 @@ Welcome to the Book Store System project! This system allows users to log in/out
 ## Technologies Used
 - GoLang: Backend development
 - MySQL: Database management
+- ByCrypt: Password Management
+- Regex: Few places like email
+- httprouter: For routing servmux was good (but i need pattern like `localhost:8000/user/activation/token/` ,`localhost:8000/new_password/reset-token/` token changed everytime even i can do it in home route but it make it look shitty so at the end of the day used this man -> httprouter)
+- Secureheader:  Added Few headers For security Related
 <!-- - JWT (JSON Web Tokens): Authentication mechanism -->
 
 ## Getting Started

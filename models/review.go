@@ -11,7 +11,7 @@ type Review struct {
 	Rating       float32 `json:"rating"`
 	Price        float32 `json:"price"`
 	Descriptions string  `json:"descriptions"`
-	Uid          int     `json:"uid"`
+	Uid          int64   `json:"uid"`
 }
 
 type ReviewModel struct {
@@ -36,8 +36,8 @@ func (m *ReviewModel) ReviewListing() ([]*Review, error) {
 }
 
 // if user logged it will show its review
-func (m *ReviewModel) MyReview(uid int) ([]*Review, error) {
-	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM reviews WHERE is_deleted = 0 AND  uid = '" + strconv.Itoa(uid) + "'"
+func (m *ReviewModel) MyReview(uid int64) ([]*Review, error) {
+	stmt := "SELECT isbn, title, rating, price, descriptions, uid FROM reviews WHERE is_deleted = 0 AND  uid = '" + strconv.Itoa(int(uid)) + "'"
 	reviews, err := m.Listing(stmt)
 	return reviews, err
 }

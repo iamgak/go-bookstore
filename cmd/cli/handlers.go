@@ -253,6 +253,7 @@ func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.user.ActivityLog("Book Listed", uid)
 	resp := app.sendMessage(true, "Book Record Saved, Sucessfully")
 	app.sendJSONResponse(w, 200, resp)
 }
@@ -304,12 +305,13 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uri := app.generateHash(r.RemoteAddr, r.URL.Port())
-	err = app.user.InsertUser(creds.Email, creds.Password, uri)
+	uid, err := app.user.InsertUser(creds.Email, creds.Password, uri)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
+	app.user.ActivityLog("Account Created", uid)
 	resp := Message{
 		Status:  true,
 		Message: "Registration Successfull ",
@@ -399,7 +401,6 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.user.ActivityLog("logged_in", uid)
-
 	// Set bearer token in header and send response
 	w.Header().Set("Authorization", "Bearer "+hashed)
 	resp := app.sendMessage(true, "Login Successfull")
@@ -407,18 +408,20 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) UserLogout(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	token := app.user.CheckBearerToken(authHeader)
-	if token != "" {
-		err := app.user.Logout(token)
+	uid := app.ValidToken(w, r)
+	if uid != 0 {
+		err := app.user.Logout(uid)
 		if err != nil {
 			app.serverError(w, err)
 			return
 		}
+
+		app.user.ActivityLog("log_out", uid)
+		resp := app.sendMessage(true, "Logout Successfull")
+		app.sendJSONResponse(w, 200, resp)
 	}
 
-	resp := app.sendMessage(true, "Logout Successfull")
-	app.sendJSONResponse(w, 200, resp)
+	app.notFound(w)
 }
 
 // after forget password it create uri in db like /new_password/db_uri
@@ -548,7 +551,7 @@ func (app *application) sendMessage(status bool, message string) Message {
 	}
 }
 
-func (app *application) ValidToken(w http.ResponseWriter, r *http.Request) int {
+func (app *application) ValidToken(w http.ResponseWriter, r *http.Request) int64 {
 	authHeader := r.Header.Get("Authorization")
 	token := app.user.CheckBearerToken(authHeader)
 	if token == "" {
