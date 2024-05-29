@@ -43,7 +43,6 @@ func main() {
 		user:     &models.UserModel{DB: db},
 		books:    &models.BookModel{DB: db},
 		review:   &models.ReviewModel{DB: db},
-		// validator: &validator.Validator{Errors: make(map[string]string)},
 	}
 
 	srv := &http.Server{
