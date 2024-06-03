@@ -1,16 +1,15 @@
 package main
 
 import (
-	"flag"
-	// "fmt"
+	"crypto/tls"
 	"database/sql"
+	"flag"
+	_ "github.com/go-sql-driver/mysql" // sql pool register
 	"log"
 	"net/http"
 	"os"
-
-	_ "github.com/go-sql-driver/mysql" // sql pool register
-
 	"test.iamgak.net/models"
+	"time"
 )
 
 type application struct {
@@ -45,13 +44,21 @@ func main() {
 		review:   &models.ReviewModel{DB: db},
 	}
 
+	tlsConfig := &tls.Config{
+		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+	}
 	srv := &http.Server{
-		Addr:     *addr,
-		ErrorLog: errorLog,
-		Handler:  app.routes(),
+		Addr:      *addr,
+		ErrorLog:  errorLog,
+		TLSConfig: tlsConfig,
+		// MaxHeaderBytes: 524288, // 0.5MB Max header size per request
+		IdleTimeout:  time.Minute, // conncection close after 1 minute it do again handshake or something
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		Handler:      app.routes(),
 	}
 
 	infoLog.Printf("Starting server on %s", *addr)
-	err = srv.ListenAndServe()
+	err = srv.ListenAndServeTLS("./tls/cert.pem", "./tls/key.pem")
 	errorLog.Fatal(err)
 }

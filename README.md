@@ -16,6 +16,7 @@ Welcome to the Book Store System project! This system allows users to log in/out
 - Regex: Few places like email
 - httprouter: For routing servmux was good (but i need pattern like `localhost:8000/user/activation/token/` ,`localhost:8000/new_password/reset-token/` token changed everytime even i can do it in home route but it make it look shitty so at the end of the day used this man -> httprouter)
 - Secureheader:  Added Few headers For security Related
+- TLS:  Added TLS Certificate Encryption 
 <!-- - JWT (JSON Web Tokens): Authentication mechanism -->
 
 ## Getting Started
@@ -27,14 +28,14 @@ Welcome to the Book Store System project! This system allows users to log in/out
 
 ### Installation
 1. Clone the repository:
-    ```bash
+```bash
     git clone github.com/iamgak/go-bookstore
-    ```
+```
 
 2. Navigate to the project directory:
-    ```bash
+```bash
     cd go-bookstore
-    ```
+```
 
 3. Set up the database:
     - Create a MySQL database named `go-bookstore`.
@@ -42,35 +43,51 @@ Welcome to the Book Store System project! This system allows users to log in/out
 
 
 4. Install dependencies:
-    ```bash
+```bash
     go mod tidy
-    ```
+```
+5. Create TLS key & Ceritificate:
 
-5. Run the server:
-    ```bash
+Search, where Go file is saved then goto src then crypto then tls then copy whole path something like below
+
+```bash
+    mkdir tls; cd tls;
+    go run /usr/local/go/src/crypto/tls/generate_cert.go --rsa-bits=2048 --host=localhost
+```
+
+After that if you have .gitignore than add manually or 
+
+```bash
+    cd go-bookstore;
+    echo 'tls/' << .gitignore
+```
+
+6. Run the server:
+
+```bash
     go run cmd/cli
-    ```
+```
+
     optional if you want to change port number and root info
-    ```bash
-
+```bash
     go run cmd/cli -addr=":8000" -dsn="root:@/bookstore?parseTime=true"
-    ```
+ ```
 
-5. Access the application:
-    Open your web browser and navigate to `http://localhost:8000`.
+7. Access the application:
+    Open your web browser and navigate to `https://localhost:8000`.
 
 ### Usage
-- Register a new user account By PostMethod `http://localhost:8000/user/register`.
-- Validate account By GetMethod `http://localhost:8000/user/activation/activation-token` activation-token is in user table after registration in activation_token attribute.
-- Login/Logout in with existing credentials By PostMethod `http://localhost:8000/user/login` / `http://localhost:8000/user/logout`.
-- Browse all reviews By GetMethod `http://localhost:8000/review/listing`.
-- Delete reviews By GetMethod `http://localhost:8000/book/delete/id`.
-- Browse reviews By ISBN or Author or Book GetMethod `http://localhost:8000/review/search/934-3434` or `http://localhost:8000/review/search/murakami` .
-- Insert new book info By PostMethod After Login `http://localhost:8000/book/create` .
-- Write reviews for books you've read By PostMethod After Login `http://localhost:8000/review/create` .
-- Browse All Book By GetMethod `http://localhost:8000/book/listing`
-- Request Forget Password By PostMethod  `http://localhost:8000/user/forget_password/`token send on given email if registered but in this case you will copy it from table forget_passw during new password.
-- Change Forget Password By PostMethod  `http://localhost:8000/user/new_password/reset-token` token from forget_password .
+- Register a new user account By PostMethod `https://localhost:8000/user/register`.
+- Validate account By GetMethod `https://localhost:8000/user/activation/activation-token` activation-token is in user table after registration in activation_token attribute.
+- Login/Logout in with existing credentials By PostMethod `https://localhost:8000/user/login` / `https://localhost:8000/user/logout`.
+- Browse all reviews By GetMethod `https://localhost:8000/review/listing`.
+- Delete reviews By GetMethod `https://localhost:8000/book/delete/id`.
+- Browse reviews By ISBN or Author or Book GetMethod `https://localhost:8000/review/search/934-3434` or `https://localhost:8000/review/search/murakami` .
+- Insert new book info By PostMethod After Login `https://localhost:8000/book/create` .
+- Write reviews for books you've read By PostMethod After Login `https://localhost:8000/review/create` .
+- Browse All Book By GetMethod `https://localhost:8000/book/listing`
+- Request Forget Password By PostMethod  `https://localhost:8000/user/forget_password/`token send on given email if registered but in this case you will copy it from table forget_passw during new password.
+- Change Forget Password By PostMethod  `https://localhost:8000/user/new_password/reset-token` token from forget_password .
 
 ## Contributing
 Contributions are welcome! If you'd like to contribute to this project, please fork the repository and submit a pull request with your changes.
