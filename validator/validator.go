@@ -42,10 +42,12 @@ func (v *Validator) ValidEmail(email string) bool {
 	return emailPattern.MatchString(email)
 }
 
-func (v *Validator) ValidPassword(password string) bool {
-	if len(password) <= 4 {
-		return false
+func (v *Validator) ValidPassword(password string) {
+	v.CheckField(len(password) > 0, "password", "Password Should not be empty")
+	if len(password) > 0 {
+		emailPattern := regexp.MustCompile(`^[a-zA-Z0-9._%\-$@]{5,20}$`)
+		v.CheckField(emailPattern.MatchString(password), "password", "Password Should contain Alphanumeric char and Special char (._%-$@) only between 5 to 20 char")
+		// v.CheckField(len(password) < 20, "password", "Password Should be less than 20")
 	}
-	// Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character
-	return true
+
 }

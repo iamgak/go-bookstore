@@ -12,6 +12,7 @@ Welcome to the Book Store System project! This system allows users to log in/out
 ## Technologies Used
 - GoLang: Backend development
 - MySQL: Database management
+- Redis: For Fast Retrieval and put off some load from database
 - ByCrypt: Password Management
 - Regex: Few places like email
 - httprouter: For routing servmux was good (but i need pattern like `localhost:8000/user/activation/token/` ,`localhost:8000/new_password/reset-token/` token changed everytime even i can do it in home route but it make it look shitty so at the end of the day used this man -> httprouter)
@@ -24,7 +25,8 @@ Welcome to the Book Store System project! This system allows users to log in/out
 ### Prerequisites
 - GoLang installed on your system. You can download it from [here](https://golang.org/dl/).
 - MySQL installed on your system. You can download it from [here](https://www.mysql.com/download/).
-- Before sending data set Header  Content-Type: "application/json" in Postman / cURL or anyother
+- Redis installed on your system. You can read & download it from [here](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/).
+- Before sending data set Header Content-Type: "application/json" in Postman / cURL or anyother for POST & other Non-Get methods.
 
 ### Installation
 1. Clone the repository:
@@ -88,6 +90,9 @@ After that if you have .gitignore than add manually or
 - Browse All Book By GetMethod `https://localhost:8000/book/listing`
 - Request Forget Password By PostMethod  `https://localhost:8000/user/forget_password/`token send on given email if registered but in this case you will copy it from table forget_passw during new password.
 - Change Forget Password By PostMethod  `https://localhost:8000/user/new_password/reset-token` token from forget_password .
+
+## Infuture
+I want to split it into multiple microservices and put it in a single docker file and add few more context and channels.
 
 ## Contributing
 Contributions are welcome! If you'd like to contribute to this project, please fork the repository and submit a pull request with your changes.

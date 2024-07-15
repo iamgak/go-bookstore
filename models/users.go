@@ -63,28 +63,47 @@ func (m *UserModel) Logout(uid int64) error {
 	return nil
 }
 
-// login
 func (m *UserModel) Login(creds *UserLogin) (int64, error) {
 	var databasePassword string
 	var uid int64
-	err := m.DB.QueryRow("SELECT password, id FROM `users` WHERE `active` = 1 AND `email` = ? ", strings.TrimSpace(creds.Email)).Scan(&databasePassword, &uid)
+
+	// Begin a transaction (optional)
+	tx, err := m.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback() // Rollback if we encounter an error before commit
+
+	// Query for active user by email
+	err = tx.QueryRow("SELECT password, id FROM `users` WHERE `active` = 1 AND `email` = ?", strings.TrimSpace(creds.Email)).
+		Scan(&databasePassword, &uid)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, nil
+			// No user found with the given email
+			return 0, ErrUserNotFound
 		}
+		// Other database error
 		return 0, err
 	}
 
+	// Compare passwords
 	err = bcrypt.CompareHashAndPassword([]byte(databasePassword), []byte(creds.Password))
 	if err != nil {
 		if err == bcrypt.ErrMismatchedHashAndPassword {
-			return 0, nil
+			// Incorrect password
+			return 0, ErrIncorrectPassword
 		}
+		// Other bcrypt error
 		return 0, err
-
 	}
 
-	return uid, err
+	// Commit transaction (optional)
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	// Return user ID on successful login
+	return uid, nil
 }
 
 func (m *UserModel) EmailExist(email string) int64 {
@@ -152,6 +171,7 @@ func (m *UserModel) GeneratePassword(newPassword string) ([]byte, error) {
 	newHashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
 	return newHashedPassword, err
 }
+
 func (m *UserModel) CheckBearerToken(token string) string {
 	if token == "" {
 		return ""

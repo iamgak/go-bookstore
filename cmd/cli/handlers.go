@@ -98,6 +98,7 @@ func (app *application) DeleteReview(w http.ResponseWriter, r *http.Request) {
 }
 
 // create new review
+
 func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 	uid := app.ValidToken(w, r)
 	if uid == 0 {
@@ -159,12 +160,10 @@ func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 
 // bookListing related handlers
 func (app *application) BookListing(w http.ResponseWriter, r *http.Request) {
-	params := httprouter.ParamsFromContext(r.Context())
-	isbn := params.ByName("isbn")
-	bks, err := app.books.GetBookByIsbn(isbn)
+
+	bks, err := app.books.BooksListing()
 	if err != nil {
-		app.errorLog.Print("internal server error")
-		app.CustomError(w, "Internal Server Error", 500)
+		app.serverError(w, err)
 		return
 	}
 
@@ -185,9 +184,9 @@ func (app *application) BookInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := app.books.GET(isbn)
+	info, err := app.books.GetBookByIsbn(isbn)
 	if err != nil {
-		app.CustomError(w, "Internal Server Error", 500)
+		app.serverError(w, err)
 		return
 	}
 
@@ -282,9 +281,8 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	validator.CheckField(validator.NotBlank(creds.Email), "email", "Please, fill the email field")
 	validator.CheckField(validator.NotBlank(creds.Password), "password", "Please, fill the password field")
 	validator.CheckField(validator.NotBlank(creds.RepeatPassword), "repeatPassword", "Please, fill the repeat password field")
-	if validator.Errors["password"] == "" {
-		validator.CheckField(validator.ValidPassword(creds.Password), "password", "Password should be greater than 4 character ")
-	}
+
+	validator.ValidPassword(creds.Password)
 
 	if validator.Errors["email"] == "" {
 		validator.CheckField(validator.ValidEmail(creds.Email), "email", "Invalid Email Format")
@@ -347,6 +345,7 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
 	var creds *models.UserLogin
 	err = json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
@@ -361,9 +360,6 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 
 	validator.CheckField(validator.NotBlank(creds.Email), "email", "Please, fill the email field")
 	validator.CheckField(validator.NotBlank(creds.Password), "password", "Please, fill the password field")
-	if validator.Errors["password"] == "" {
-		validator.CheckField(validator.ValidPassword(creds.Password), "password", "Password should be greater than 4 character ")
-	}
 
 	if validator.Errors["email"] == "" {
 		validator.CheckField(validator.ValidEmail(creds.Email), "email", "Invalid Email Format")
@@ -455,9 +451,6 @@ func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) 
 	}
 
 	validator.CheckField(validator.NotBlank(creds.Password), "password", "Please, fill the password field")
-	if validator.Errors["password"] == "" {
-		validator.CheckField(validator.ValidPassword(creds.Password), "password", "Password should be greater than 4 character ")
-	}
 
 	validator.CheckField(validator.NotBlank(creds.RepeatPassword), "repeatPassword", "Please, fill the password field")
 	if validator.Errors["repeatPassword"] == "" && validator.Errors["password"] == "" {

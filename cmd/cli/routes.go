@@ -1,8 +1,10 @@
 package main
 
 import (
-	"github.com/julienschmidt/httprouter"
 	"net/http"
+
+	"github.com/julienschmidt/httprouter"
+	"github.com/justinas/alice"
 )
 
 func (app *application) routes() http.Handler {
@@ -30,5 +32,6 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodGet, "/user/activation/:uri", app.UserActivation)       // after registration uri created authentication
 	router.HandlerFunc(http.MethodPost, "/user/login", app.UserLogin)                     // login
 	router.HandlerFunc(http.MethodPost, "/user/logout", app.UserLogout)                   // logout
-	return app.logRequest(secureHeaders(router))
+	standard := alice.New(app.logRequest, secureHeaders)
+	return standard.Then(router)
 }
