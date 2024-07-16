@@ -1,7 +1,9 @@
 package models
 
 import (
+	"context"
 	"database/sql"
+	"github.com/redis/go-redis/v9"
 	"strconv"
 )
 
@@ -15,17 +17,20 @@ type Review struct {
 }
 
 type ReviewModel struct {
-	DB *sql.DB
+	db     *sql.DB
+	redis  *redis.Client
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // create new review
 func (m *ReviewModel) CreateReview(review *Review) error {
-	_, err := m.DB.Exec("INSERT INTO `reviews` (`isbn`,`price`,`title`,`rating`,`descriptions`,`uid`) VALUES (?,?,?,?,?,? )", &review.Isbn, &review.Price, &review.Title, &review.Rating, &review.Descriptions, &review.Uid)
+	_, err := m.db.Exec("INSERT INTO `reviews` (`isbn`,`price`,`title`,`rating`,`descriptions`,`uid`) VALUES (?,?,?,?,?,? )", &review.Isbn, &review.Price, &review.Title, &review.Rating, &review.Descriptions, &review.Uid)
 	return err
 }
 
-func (m *ReviewModel) DeleteReview(id, uid int) error {
-	_, err := m.DB.Exec("UPDATE `reviews` SET is_deleted = 1 WHERE  `id` = ? AND uid = ? ", id, uid)
+func (m *ReviewModel) DeleteReview(id, uid int64) error {
+	_, err := m.db.Exec("UPDATE `reviews` SET is_deleted = 1 WHERE  `id` = ? AND uid = ? ", id, uid)
 	return err
 }
 
@@ -43,7 +48,7 @@ func (m *ReviewModel) MyReview(uid int64) ([]*Review, error) {
 }
 
 func (m *ReviewModel) Listing(stmt string) ([]*Review, error) {
-	rows, err := m.DB.Query(stmt)
+	rows, err := m.db.Query(stmt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

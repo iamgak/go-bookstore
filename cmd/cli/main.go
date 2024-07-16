@@ -24,11 +24,10 @@ type application struct {
 	infoLog         *log.Logger
 	errorLog        *log.Logger
 	db              *sql.DB
-	books           *models.BookModel
-	user            *models.UserModel
-	review          *models.ReviewModel
+	models          *models.Init
 	session         *sessions.CookieStore
 	isAuthenticated bool
+	user_id         int64
 }
 
 func main() {
@@ -83,9 +82,7 @@ func main() {
 		errorLog: errorLog,
 		infoLog:  infoLog,
 		db:       db,
-		user:     &models.UserModel{DB: db},
-		books:    models.InitModel(db, client),
-		review:   &models.ReviewModel{DB: db},
+		models:   models.Constructor(db, client),
 		session:  store,
 	}
 

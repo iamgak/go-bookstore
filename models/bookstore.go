@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -49,15 +48,7 @@ func (m *BookModel) BookExist(ISBN string) bool {
 func (m *BookModel) GetBookByIsbn(ISBN string) ([]*Book, error) {
 	stmt := fmt.Sprintf("SELECT `isbn`,`title`,`author`,`price`,`descriptions`,`genre` FROM `books` WHERE `ISBN` = '%s' ", ISBN)
 	bk, err := m.Listing(stmt)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		} else {
-			return nil, err
-		}
-	}
-
-	return bk, nil
+	return bk, err
 }
 
 func (m *BookModel) BooksListing() ([]*Book, error) {
@@ -132,5 +123,4 @@ func (m *BookModel) ScanBookData(rows *sql.Rows, book *Book) error {
 		&book.Descriptions,
 		&book.Genre,
 	)
-	//`isbn`,`title`,`author`,`price`,`descriptions`,`genre`
 }

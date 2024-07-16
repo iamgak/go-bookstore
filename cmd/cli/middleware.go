@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 )
 
@@ -24,28 +23,32 @@ func (app *application) logRequest(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) sessionMiddleware(next http.Handler) http.Handler {
+func (app *application) LoginMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get a session. Get() takes in the request and returns a session.
-		session, err := app.session.Get(r, "session-name")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		cookie, err := r.Cookie("ldata")
+		if err != nil || cookie.Value == "" || len(cookie.Value) != 40 {
+			app.notFound(w)
+			app.infoLog.Print("Invalid Logout")
 			return
 		}
 
-		// Load session values into the request context
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, "session", session)
-		r = r.WithContext(ctx)
+		userID, err := app.models.Users.ValidUser(cookie.Value)
+		if err != nil {
+			app.serverError(w, err)
+			return
+		}
 
-		// Call the next handler
+		if userID > 0 {
+			app.isAuthenticated = true
+		}
+
+		if !app.isAuthenticated {
+			http.Redirect(w, r, "/api/user/login/", http.StatusSeeOther)
+			return
+		}
+
+		app.user_id = userID
 		next.ServeHTTP(w, r)
 
-		// Save the session
-		err = session.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	})
 }

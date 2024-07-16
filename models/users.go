@@ -1,9 +1,11 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -29,7 +31,10 @@ type UserNewPassword struct {
 
 // to use main db that initialised in main.go
 type UserModel struct {
-	DB *sql.DB
+	db     *sql.DB
+	redis  *redis.Client
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (m *UserModel) InsertUser(email, password, hashed string) (int64, error) {
@@ -38,25 +43,21 @@ func (m *UserModel) InsertUser(email, password, hashed string) (int64, error) {
 		return 0, err
 	}
 
-	result, err := m.DB.Exec("INSERT INTO users(`email`,`password`,`activation_token`) VALUES (?, ?,? )", email, string(HashedPassword), hashed)
+	result, err := m.db.Exec("INSERT INTO users(`email`,`password`,`activation_token`) VALUES (?, ?,? )", email, string(HashedPassword), hashed)
 	if err != nil {
 		return 0, err
 	}
-	uid, err := result.LastInsertId()
-	return uid, err
+	return result.LastInsertId()
 }
 
 func (m *UserModel) SetLoginToken(token string, uid int64) error {
-	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = ? WHERE `id` = ?", token, uid)
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err := m.db.Exec("UPDATE `users` SET `login_token` = ? WHERE `id` = ?", token, uid)
+	return err
 }
 
 // logout
 func (m *UserModel) Logout(uid int64) error {
-	_, err := m.DB.Exec("UPDATE `users` SET `login_token` = NULL WHERE `id` = ?", uid)
+	_, err := m.db.Exec("UPDATE `users` SET `login_token` = NULL WHERE `id` = ?", uid)
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func (m *UserModel) Login(creds *UserLogin) (int64, error) {
 	var uid int64
 
 	// Begin a transaction (optional)
-	tx, err := m.DB.Begin()
+	tx, err := m.db.Begin()
 	if err != nil {
 		return 0, err
 	}
@@ -108,20 +109,20 @@ func (m *UserModel) Login(creds *UserLogin) (int64, error) {
 
 func (m *UserModel) EmailExist(email string) int64 {
 	var uid int64
-	_ = m.DB.QueryRow("SELECT `id` FROM `users` WHERE  `email` = ?", email).Scan(&uid)
+	_ = m.db.QueryRow("SELECT `id` FROM `users` WHERE  `email` = ?", email).Scan(&uid)
 	return uid
 }
 
-func (m *UserModel) ValidToken(token string) int64 {
+func (m *UserModel) ValidUser(token string) (int64, error) {
 	var id int64
-	_ = m.DB.QueryRow("SELECT `id` FROM `users` WHERE `login_token` = ? ", token).Scan(&id)
-	return id
+	err := m.db.QueryRow("SELECT `id` FROM `users` WHERE `login_token` = ? ", token).Scan(&id)
+	return id, err
 }
 
 func (m *UserModel) ValidURI(uri string) bool {
-	var exists int
+	var exists int64
 	query := "SELECT 1 FROM users WHERE activation_token = ? AND active = 0"
-	err := m.DB.QueryRow(query, uri).Scan(&exists)
+	err := m.db.QueryRow(query, uri).Scan(&exists)
 	if err != nil {
 		return false
 	}
@@ -130,19 +131,19 @@ func (m *UserModel) ValidURI(uri string) bool {
 }
 
 func (m *UserModel) AccountActivate(token string) error {
-	_, err := m.DB.Exec("UPDATE `users` SET `activation_token` = NULL, `active` = 1 WHERE `activation_token` = ? ", token)
+	_, err := m.db.Exec("UPDATE `users` SET `activation_token` = NULL, `active` = 1 WHERE `activation_token` = ? ", token)
 	return err
 }
 
 func (m *UserModel) ForgetPassword(uid int64, uri string) error {
-	_, _ = m.DB.Exec("UPDATE `forget_passw` SET `superseded` = 1 WHERE `uid` = ?", uid)
-	_, err := m.DB.Exec("INSERT INTO `forget_passw` (`uid`,`uri`,`superseded`) VALUES(?,?,0) ", uid, uri)
+	_, _ = m.db.Exec("UPDATE `forget_passw` SET `superseded` = 1 WHERE `uid` = ?", uid)
+	_, err := m.db.Exec("INSERT INTO `forget_passw` (`uid`,`uri`,`superseded`) VALUES(?,?,0) ", uid, uri)
 	return err
 }
 
 func (m *UserModel) ForgetPasswordUri(uri string) (int64, error) {
 	var result int64
-	err := m.DB.QueryRow("SELECT uid FROM `forget_passw` WHERE `uri` = ? AND `superseded` = 0", uri).Scan(&result)
+	err := m.db.QueryRow("SELECT uid FROM `forget_passw` WHERE `uri` = ? AND `superseded` = 0", uri).Scan(&result)
 	if err != nil {
 		return 0, err
 	}
@@ -157,12 +158,12 @@ func (m *UserModel) NewPassword(newPassword string, id int64) error {
 	}
 
 	stmt := "UPDATE users SET password = ? WHERE id = ?"
-	_, err = m.DB.Exec(stmt, string(newHashedPassword), id)
+	_, err = m.db.Exec(stmt, string(newHashedPassword), id)
 	if err != nil {
 		return err
 	}
 
-	_, _ = m.DB.Exec("UPDATE `forget_passw` SET `superseded` =1 WHERE `uid` = ?", id)
+	_, _ = m.db.Exec("UPDATE `forget_passw` SET `superseded` =1 WHERE `uid` = ?", id)
 	m.ActivityLog("password_changed", id)
 	return nil
 }
@@ -172,15 +173,7 @@ func (m *UserModel) GeneratePassword(newPassword string) ([]byte, error) {
 	return newHashedPassword, err
 }
 
-func (m *UserModel) CheckBearerToken(token string) string {
-	if token == "" {
-		return ""
-	}
-
-	return strings.TrimPrefix(token, "Bearer ")
-}
-
 func (m *UserModel) ActivityLog(activity string, uid int64) {
-	_, _ = m.DB.Exec("UPDATE `user_log` SET superseded = 1 WHERE activity = ? AND uid = ?", activity, uid)
-	_, _ = m.DB.Exec("INSERT INTO `user_log` SET  activity = ? , uid = ?, superseded = 0", activity, uid)
+	_, _ = m.db.Exec("UPDATE `user_log` SET superseded = 1 WHERE activity = ? AND uid = ?", activity, uid)
+	_, _ = m.db.Exec("INSERT INTO `user_log` SET  activity = ? , uid = ?, superseded = 0", activity, uid)
 }

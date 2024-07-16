@@ -4,13 +4,12 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/julienschmidt/httprouter"
 	"test.iamgak.net/models"
 	"test.iamgak.net/validator"
+	"time"
 )
 
 type Message struct {
@@ -30,10 +29,9 @@ func (app *application) Home(w http.ResponseWriter, r *http.Request) {
 
 // all the review listing
 func (app *application) ReviewListing(w http.ResponseWriter, r *http.Request) {
-	bks, err := app.review.ReviewListing()
+	bks, err := app.models.Review.ReviewListing()
 	if err != nil {
-		app.errorLog.Print("internal server error")
-		app.CustomError(w, "Internal Server Error", 500)
+		app.serverError(w, err)
 		return
 	}
 
@@ -42,16 +40,9 @@ func (app *application) ReviewListing(w http.ResponseWriter, r *http.Request) {
 
 // logged user review
 func (app *application) MyReview(w http.ResponseWriter, r *http.Request) {
-	uid := app.ValidToken(w, r)
-	if uid == 0 {
-		app.notFound(w)
-		return
-	}
-
-	bks, err := app.review.MyReview(uid)
+	bks, err := app.models.Review.MyReview(app.user_id)
 	if err != nil {
-		app.errorLog.Print("internal server error")
-		app.CustomError(w, "Internal Server Error", 500)
+		app.serverError(w, err)
 		return
 	}
 
@@ -62,10 +53,9 @@ func (app *application) MyReview(w http.ResponseWriter, r *http.Request) {
 func (app *application) ReviewSearch(w http.ResponseWriter, r *http.Request) {
 	params := httprouter.ParamsFromContext(r.Context())
 	isbn := params.ByName("isbn")
-	bks, err := app.review.GetReviewByIsbn(isbn)
+	bks, err := app.models.Review.GetReviewByIsbn(isbn)
 	if err != nil {
-		app.errorLog.Print("internal server error")
-		app.CustomError(w, "Internal Server Error", 500)
+		app.serverError(w, err)
 		return
 	}
 
@@ -80,19 +70,13 @@ func (app *application) DeleteReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uid := app.ValidToken(w, r)
-	if uid == 0 {
-		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
-		return
-	}
-
-	err = app.review.DeleteReview(int(review_id), int(uid))
+	err = app.models.Review.DeleteReview(review_id, app.user_id)
 	if err != nil {
 		app.notFound(w)
 		return
 	}
 
-	app.user.ActivityLog("review_deleted", uid)
+	app.models.Users.ActivityLog("review_deleted", app.user_id)
 	resp := app.sendMessage(true, "Review Deleted")
 	app.sendJSONResponse(w, 200, resp)
 }
@@ -100,12 +84,6 @@ func (app *application) DeleteReview(w http.ResponseWriter, r *http.Request) {
 // create new review
 
 func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
-	uid := app.ValidToken(w, r)
-	if uid == 0 {
-		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
-		return
-	}
-
 	var CreateReview *models.Review
 	err := json.NewDecoder(r.Body).Decode(&CreateReview)
 	if err != nil {
@@ -114,7 +92,7 @@ func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	CreateReview.Uid = uid
+	CreateReview.Uid = app.user_id
 	validator := &validator.Validator{
 		Errors: make(map[string]string),
 	}
@@ -136,7 +114,7 @@ func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if validator.Valid() {
-		book_id := app.books.BookExist(CreateReview.Isbn)
+		book_id := app.models.Books.BookExist(CreateReview.Isbn)
 		if book_id {
 			validator.Errors["isbn"] = "isbn already Exist"
 		}
@@ -147,13 +125,13 @@ func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.review.CreateReview(CreateReview)
+	err = app.models.Review.CreateReview(CreateReview)
 	if err != nil {
 		app.CustomError(w, "Server Issue", 500)
 		return
 	}
 
-	app.user.ActivityLog("review_created", uid)
+	app.models.Users.ActivityLog("review_created", app.user_id)
 	resp := app.sendMessage(true, "Review Saved")
 	app.sendJSONResponse(w, 200, resp)
 }
@@ -161,7 +139,7 @@ func (app *application) AddReview(w http.ResponseWriter, r *http.Request) {
 // bookListing related handlers
 func (app *application) BookListing(w http.ResponseWriter, r *http.Request) {
 
-	bks, err := app.books.BooksListing()
+	bks, err := app.models.Books.BooksListing()
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -184,7 +162,7 @@ func (app *application) BookInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := app.books.GetBookByIsbn(isbn)
+	info, err := app.models.Books.GetBookByIsbn(isbn)
 	if err != nil {
 		app.serverError(w, err)
 		return
@@ -195,12 +173,6 @@ func (app *application) BookInfo(w http.ResponseWriter, r *http.Request) {
 
 // add book in db
 func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
-	uid := app.ValidToken(w, r)
-	if uid == 0 {
-		app.CustomError(w, "Authorization failed. Please provide a valid bearer token to access this resource", 401)
-		return
-	}
-
 	var bookRegister *models.Book
 	err := json.NewDecoder(r.Body).Decode(&bookRegister)
 	if err != nil {
@@ -235,7 +207,7 @@ func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if validator.Valid() {
-		book_id := app.books.BookExist(bookRegister.ISBN)
+		book_id := app.models.Books.BookExist(bookRegister.ISBN)
 		if book_id {
 			validator.Errors["isbn"] = "isbn already Exist"
 		}
@@ -246,28 +218,22 @@ func (app *application) AddBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.books.CreateBook(bookRegister)
+	err = app.models.Books.CreateBook(bookRegister)
 	if err != nil {
 		app.CustomError(w, "Server Issue1", 500)
 		return
 	}
 
-	app.user.ActivityLog("Book Listed", uid)
+	app.models.Users.ActivityLog("Book Listed", app.user_id)
 	resp := app.sendMessage(true, "Book Record Saved, Sucessfully")
 	app.sendJSONResponse(w, 200, resp)
 }
 
 // register user
 func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		app.errorLog.Println("Error parsing form data:", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
 
 	var creds *models.UserRegister
-	err = json.NewDecoder(r.Body).Decode(&creds)
+	err := json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
 		app.errorLog.Print(err)
 		app.CustomError(w, "Unsupported or empty fields", 400)
@@ -287,7 +253,7 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	if validator.Errors["email"] == "" {
 		validator.CheckField(validator.ValidEmail(creds.Email), "email", "Invalid Email Format")
 	}
-	if app.user.EmailExist(creds.Email) != 0 {
+	if app.models.Users.EmailExist(creds.Email) != 0 {
 		validator.CheckField(false, "email", "Email already registered")
 	}
 
@@ -303,13 +269,13 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uri := app.generateHash(r.RemoteAddr, r.URL.Port())
-	uid, err := app.user.InsertUser(creds.Email, creds.Password, uri)
+	uid, err := app.models.Users.InsertUser(creds.Email, creds.Password, uri)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-	app.user.ActivityLog("Account Created", uid)
+	app.models.Users.ActivityLog("Account Created", uid)
 	resp := Message{
 		Status:  true,
 		Message: "Registration Successfull ",
@@ -322,12 +288,12 @@ func (app *application) UserRegister(w http.ResponseWriter, r *http.Request) {
 func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
 	params := httprouter.ParamsFromContext(r.Context())
 	uri := params.ByName("uri")
-	if !app.user.ValidURI(uri) {
+	if !app.models.Users.ValidURI(uri) {
 		app.notFound(w)
 		return
 	}
 
-	err := app.user.AccountActivate(uri)
+	err := app.models.Users.AccountActivate(uri)
 	if err != nil {
 		app.notFound(w)
 		return
@@ -339,15 +305,8 @@ func (app *application) UserActivation(w http.ResponseWriter, r *http.Request) {
 
 // login
 func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		app.errorLog.Println("Error parsing form data:", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-
 	var creds *models.UserLogin
-	err = json.NewDecoder(r.Body).Decode(&creds)
+	err := json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
 		app.errorLog.Print(err)
 		app.CustomError(w, "Unsupported or empty fields", 400)
@@ -370,14 +329,14 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uid := app.user.EmailExist(creds.Email)
+	uid := app.models.Users.EmailExist(creds.Email)
 	if uid == 0 {
 		resp := app.sendMessage(false, "Incorrect Credentials")
 		app.sendJSONResponse(w, 200, resp)
 		return
 	}
 
-	uid, err = app.user.Login(creds)
+	uid, err = app.models.Users.Login(creds)
 	if err != nil {
 		app.CustomError(w, "Internal Server Error", 500)
 		return
@@ -390,49 +349,39 @@ func (app *application) UserLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hashed := app.generateHash(r.RemoteAddr, r.URL.Port())
-	err = app.user.SetLoginToken(hashed, uid)
+	err = app.models.Users.SetLoginToken(hashed, uid)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-	app.user.ActivityLog("logged_in", uid)
-	// Set bearer token in header and send response
-	w.Header().Set("Authorization", "Bearer "+hashed)
+	app.models.Users.ActivityLog("logged_in", app.user_id)
+	cookie := &http.Cookie{
+		Name:    "ldata",
+		Value:   hashed,
+		Expires: time.Now().Add(1 * time.Hour),
+		Path:    "/",
+	}
+
+	http.SetCookie(w, cookie)
+
 	resp := app.sendMessage(true, "Login Successfull")
 	app.sendJSONResponse(w, 200, resp)
 }
 
 func (app *application) UserLogout(w http.ResponseWriter, r *http.Request) {
-	uid := app.ValidToken(w, r)
-	if uid != 0 {
-		err := app.user.Logout(uid)
-		if err != nil {
-			app.serverError(w, err)
-			return
-		}
-
-		app.user.ActivityLog("log_out", uid)
-		resp := app.sendMessage(true, "Logout Successfull")
-		app.sendJSONResponse(w, 200, resp)
-	}
-
-	app.notFound(w)
+	app.models.Users.ActivityLog("log_out", app.user_id)
+	resp := app.sendMessage(true, "Logout Successfull")
+	app.sendJSONResponse(w, 200, resp)
 }
 
 // after forget password it create uri in db like /new_password/db_uri
 func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		app.errorLog.Println("Error parsing form data:", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
 
 	params := httprouter.ParamsFromContext(r.Context())
 	uri := params.ByName("uri")
 
-	uid, err := app.user.ForgetPasswordUri(uri)
+	uid, err := app.models.Users.ForgetPasswordUri(uri)
 	if err != nil {
 		app.notFound(w)
 		return
@@ -464,7 +413,7 @@ func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = app.user.NewPassword(creds.Password, uid)
+	err = app.models.Users.NewPassword(creds.Password, uid)
 	if err != nil {
 		app.CustomError(w, "Internal Server Error"+err.Error(), 500)
 		return
@@ -476,15 +425,9 @@ func (app *application) NewPasswordPost(w http.ResponseWriter, r *http.Request) 
 
 // it will create a uri if email is valid and active user
 func (app *application) ForgetPasswordPost(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		app.errorLog.Println("Error parsing form data:", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
 
 	var creds *models.ForgetPassword
-	err = json.NewDecoder(r.Body).Decode(&creds)
+	err := json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
 		app.errorLog.Print(err)
 		app.CustomError(w, "Empty field / Unsupported Content-Type", 400)
@@ -502,11 +445,11 @@ func (app *application) ForgetPasswordPost(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	uid := app.user.EmailExist(creds.Email)
+	uid := app.models.Users.EmailExist(creds.Email)
 	if uid > 0 {
 		token := app.generateHash(creds.Email, r.RemoteAddr)
 		uri := app.generateHash(token, r.RemoteAddr)
-		err := app.user.ForgetPassword(uid, uri)
+		err := app.models.Users.ForgetPassword(uid, uri)
 		if err != nil {
 			app.CustomError(w, "Internal Server Error", 400)
 		}
@@ -542,15 +485,4 @@ func (app *application) sendMessage(status bool, message string) Message {
 		Status:  status,
 		Message: message,
 	}
-}
-
-func (app *application) ValidToken(w http.ResponseWriter, r *http.Request) int64 {
-	authHeader := r.Header.Get("Authorization")
-	token := app.user.CheckBearerToken(authHeader)
-	if token == "" {
-		return 0
-	}
-
-	uid := app.user.ValidToken(token)
-	return uid
 }
