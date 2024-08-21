@@ -10,7 +10,7 @@ Welcome to the Book Store System project! This system allows users to log in/out
 - User profile: Users can view and update their few profile information.
 
 ## Technologies Used
-- GoLang: Backend development
+- GoLang: BackEnd development
 - MySQL: Database management
 - Redis: For Fast Retrieval and put off some load from database
 - ByCrypt: Password Management
